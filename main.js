@@ -29,6 +29,7 @@ import * as path from "path";
 
 import unhandled from "electron-unhandled";
 
+import { migrateUserDataFolder } from "./src/electron/data/migrations/migrate-user-data-folder.js";
 import UserPreferencesStore from "./src/electron/data/user-preferences.js";
 import DkpDatabaseStore from "./src/electron/data/dkp-database.js";
 import TriggerDatabaseStore from "./src/electron/data/trigger-database.js";
@@ -73,6 +74,7 @@ const __dirname = path.dirname( __filename );
 var mainWindow, logWatcherWindow, testWindow;
 var enableDevMode = false;
 const updateCheckInterval = 10 * 60 * 1000;
+migrateUserDataFolder();
 const winManager = new WindowManager(__dirname);
 const userPreferences = new UserPreferencesStore( {} );
 const dkpDatabase = new DkpDatabaseStore();

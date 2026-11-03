@@ -99,7 +99,7 @@ jobs:
           - **eq_nag_portable.exe**: the build to test.
           - **eq_nag_portable-perf.exe**: the same build, timing itself while it runs.
             Use it when Nag seems slow: run it the same way, then send
-            \`perf-report.json\` from \`%APPDATA%\\electron-angular-eq-parse\`. It
+            \`perf-report.json\` from \`%APPDATA%\\EQNag\`. It
             contains timings and trigger names, nothing else.
 
           These aren't code-signed, so Windows SmartScreen may warn the first time:

@@ -65,7 +65,7 @@ Each test build has two portables: `eq_nag_portable.exe`, built exactly like
 a release (no taps), and `eq_nag_portable-perf.exe`, the same code with the
 taps switched on by default (the workflow adds `perf-always-on.json`). A
 tester who sees Nag being slow runs the perf portable the same way and sends
-you `perf-report.json` from `%APPDATA%\electron-angular-eq-parse`. It
+you `perf-report.json` from `%APPDATA%\EQNag`. It
 contains timings and trigger names, nothing else.
 
 `--perf` itself adds a little work: in a raid replay, about 1.5% of one core

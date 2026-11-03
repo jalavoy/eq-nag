@@ -1,5 +1,6 @@
 {
-  "name": "electron-angular-eq-parse",
+  "name": "eqnag",
+  "productName": "EQNag",
   "version": "0.2.26",
   "main": "main.js",
   "description": "An EverQuest Notification AGent",
