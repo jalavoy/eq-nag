@@ -53,6 +53,13 @@ class WindowManager {
     /** @type {WebContents} */
     #arrangeCaller;
 
+    /**
+     * The origin the renderer is currently positioning its overlays with.
+     *
+     * @type {import("electron").Point}
+     */
+    #rendererOrigin;
+
     /** @type {BrowserWindow[]} */
     #openOverlayEditors = [];
 
@@ -369,6 +376,7 @@ class WindowManager {
 
             rendererOnTopId = setInterval( () => {
                 this.#renderer.setAlwaysOnTop( true, "screen-saver" );
+                this.#keepOverlaysAligned();
             }, 1000 );
         } );
 
@@ -868,14 +876,22 @@ class WindowManager {
         let executeRendererBoundsChange = false;
         // A new profile has no saved bounds yet; that isn't a resolution change.
         const hadSavedBounds = !ElectronUtilities.invalidScreenBounds( bounds );
+        // Bounds saved before the renderer was padded by 50 pixels are still the same layout.
+        const samePaddedLayout = hadSavedBounds && ElectronUtilities.compareRectangles( { ...bounds, y: bounds.y - 50, height: bounds.height + 50 }, calcBounds, true );
 
         // If the current size of the renderer doesn't match the calculated size, then we need to resize/move our overlays.
         if ( ElectronUtilities.invalidScreenBounds( bounds ) || !ElectronUtilities.compareRectangles( bounds, calcBounds, true ) ) {
-            this.#userPrefDb.rendererBounds = calcBounds;
+            // Starting up while a monitor is off or asleep shouldn't replace the
+            // normal layout, so the user has to acknowledge the warning first.
+            if ( !hadSavedBounds || samePaddedLayout || !this.#userPrefDb.enableCheckWindowPosition ) {
+                this.#userPrefDb.rendererBounds = calcBounds;
+            }
             // If the renderer bounds have diverged enough from the calculated bounds, then we need to execute the renderer bounds change.
             executeRendererBoundsChange = true;
             bounds = calcBounds;
         }
+
+        this.#rendererOrigin = { x: 0 - bounds.x, y: 0 - bounds.y };
 
         log.info( '[Renderer:loadRenderer] Loading renderer bounds', bounds );
 
@@ -934,7 +950,7 @@ class WindowManager {
                 // Send the mutated overlays to the renderer.
                 this.#renderer.webContents.send( 'renderer:resolution-changed', { overlays: overlays, origin: newOrigin } );
 
-                if ( hadSavedBounds && this.#userPrefDb.enableCheckWindowPosition ) {
+                if ( hadSavedBounds && !samePaddedLayout && this.#userPrefDb.enableCheckWindowPosition ) {
                     // Send a warning to the main window that the resolution has changed.
                     this.#mainWindow.reference.webContents.send( 'dialog:warning', { code: 'Renderer:ResolutionChanged' } );
                 }
@@ -947,6 +963,7 @@ class WindowManager {
             this.#renderer.setAlwaysOnTop( true, "screen-saver" );
             this.#renderer.setVisibleOnAllWorkspaces( true );
             this.#renderer.setFullScreenable( false );
+            this.#keepOverlaysAligned();
         }, 1000 );
 
         ipcMain.once( 'main:angular-ready', () => {
@@ -1394,23 +1411,64 @@ class WindowManager {
         const backToNormal = !ElectronUtilities.invalidScreenBounds( normalSize ) && ElectronUtilities.compareRectangles( normalSize, newSize, true );
 
         // If the current size of the renderer doesn't match the calculated size, then we need to resize/move our overlays.
-        if ( !ElectronUtilities.compareRectangles( currentSize, newSize, false ) ) {
+        const resized = !ElectronUtilities.compareRectangles( currentSize, newSize, false ) && this.#resizeRenderer( newSize );
 
-            // Because the size includes the relative position to the primary
-            // display, we can find the (x0,y0) point of the primary display using
-            // this simple formula.
-            let newOrigin = { x: 0 - newSize.x, y: 0 - newSize.y };
+        // Because the renderer's position is relative to the primary display,
+        // we can find the (x0,y0) point of the primary display using this
+        // simple formula.  This uses where the renderer actually is, as Windows
+        // can move it by itself or refuse to move it when a monitor changes.
+        const rendererBounds = this.#renderer.getBounds();
+        let newOrigin = { x: 0 - rendererBounds.x, y: 0 - rendererBounds.y };
 
-            if ( this.#resizeRenderer( newSize ) ) {
-                overlays = this.mutateOverlays( overlays );
-                this.#renderer.webContents.send( 'renderer:resolution-changed', { overlays: overlays, origin: newOrigin } );
+        const originChanged = newOrigin.x !== this.#rendererOrigin?.x || newOrigin.y !== this.#rendererOrigin?.y;
 
-                if ( backToNormal ) {
-                    // Close the warning if it's still open.
-                    this.#mainWindow.reference.webContents.send( 'dialog:warning:resolved', { code: 'Renderer:ResolutionChanged' } );
-                } else if ( showWarning ) {
-                    this.#mainWindow.reference.webContents.send( 'dialog:warning', { code: 'Renderer:ResolutionChanged' } );
-                }
+        if ( resized || originChanged ) {
+            log.info( '[WindowManager:checkOverlayPositions] Repositioning overlays.', { currentSize, newSize, resized, originChanged } );
+
+            this.#rendererOrigin = newOrigin;
+            overlays = this.mutateOverlays( overlays );
+            this.#renderer.webContents.send( 'renderer:resolution-changed', { overlays: overlays, origin: newOrigin } );
+
+            if ( backToNormal ) {
+                // Close the warning if it's still open.
+                this.#mainWindow.reference.webContents.send( 'dialog:warning:resolved', { code: 'Renderer:ResolutionChanged' } );
+            } else if ( showWarning ) {
+                this.#mainWindow.reference.webContents.send( 'dialog:warning', { code: 'Renderer:ResolutionChanged' } );
+            }
+        }
+    }
+
+
+
+
+
+
+
+
+
+
+    /**
+     * Keeps the overlays in place if Windows moves the renderer window by
+     * itself.  This doesn't always come with a display event, and until the
+     * renderer has the new origin every overlay is offset by the same amount.
+     */
+    #keepOverlaysAligned() {
+        if ( !this.#renderer || this.#renderer.webContents.isLoading() ) {
+            return;
+        }
+
+        const bounds = this.#renderer.getBounds();
+        const origin = { x: 0 - bounds.x, y: 0 - bounds.y };
+
+        if ( origin.x !== this.#rendererOrigin?.x || origin.y !== this.#rendererOrigin?.y ) {
+            log.warn( '[WindowManager:keepOverlaysAligned] The renderer window was moved. Realigning overlays.', { from: this.#rendererOrigin, to: origin, bounds } );
+
+            this.#rendererOrigin = origin;
+            this.#renderer.webContents.send( 'renderer:resolution-changed', { overlays: this.mutateOverlays( this.#overlayDatabase.getAll() ), origin: origin } );
+
+            // Then try to put the renderer back where it belongs.
+            if ( this.#userPrefDb.enableCheckWindowPosition ) {
+                this.scheduleOverlayPositionCheck();
             }
         }
     }
