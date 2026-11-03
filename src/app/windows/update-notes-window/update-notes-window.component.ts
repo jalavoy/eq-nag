@@ -7,7 +7,7 @@ import { ActivatedRoute } from '@angular/router';
 // 'https://api.github.com/repos/guildantix/eq-nag/releases/tags/v0.1.77';
 // 'https://api.github.com/repositories/276931539/releases/latest';
 // const releaseUrl: string = 'https://api.github.com/repos/guildantix/eq-nag/releases/tags/v0.1.77';
-const releaseUrl: string = 'https://api.github.com/repos/guildantix/eq-nag/releases';
+const releaseUrl: string = 'https://api.github.com/repos/jdewittwright/eq-nag/releases';
 
 interface IReleaseInfo {
     html_url: string;

@@ -6,7 +6,7 @@ EverQuest log file and shows alerts, timers and combat information on screen.
 ## Download
 
 Download Nag only from the
-[Releases page](https://github.com/guildantix/eq-nag/releases). After you
+[Releases page](https://github.com/jdewittwright/eq-nag/releases). After you
 install it, Nag updates itself.
 
 ## Is this download safe?
@@ -19,7 +19,7 @@ source code in this repository; nobody builds releases on their own computer.
   a download with the [GitHub CLI](https://cli.github.com/):
 
   ```
-  gh attestation verify EQ-Nag-Setup-<version>.exe --repo guildantix/eq-nag
+  gh attestation verify EQ-Nag-Setup-<version>.exe --repo jdewittwright/eq-nag
   ```
 
 - **Checksum:** the Releases page shows each file's SHA-256. To compare it
