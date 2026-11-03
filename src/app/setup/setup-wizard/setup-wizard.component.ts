@@ -6,9 +6,11 @@ import { CharactersListComponent } from 'src/app/characters-list/characters-list
 import { DpsMeterSettings, OverlayWindowModel, Point, Rectangle, SettingsKeys } from 'src/app/core.model';
 import { IpcService } from 'src/app/ipc.service';
 import { customAlphabet } from 'nanoid';
-import { forkJoin, Observable, timer } from 'rxjs';
+import { forkJoin, Observable, of, timer } from 'rxjs';
+import { catchError, timeout } from 'rxjs/operators';
 const alphabet = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
 const nanoid = customAlphabet( alphabet, 16 );
+const setupStepTimeoutMs = 10000;
 
 @Component( {
     selector: 'app-setup-wizard',
@@ -41,6 +43,7 @@ export class SetupWizardComponent implements OnInit {
     private _detrimentalId: string;
     private _benficialId: string;
     private _alertId: string;
+    private _creatingOverlays: boolean = false;
 
     @ViewChild( 'stepper', { static: false, read: MatStepper } ) public stepper: MatStepper;
     
@@ -67,6 +70,11 @@ export class SetupWizardComponent implements OnInit {
     }
 
     next() {
+
+        // Clicking again while the overlays are being created would open more arrange dialogs.
+        if ( this._creatingOverlays ) {
+            return;
+        }
 
         if ( this.stepper.selected?.label === 'Overlays' ) {
             // Now we can create our default overlays.
@@ -331,7 +339,9 @@ export class SetupWizardComponent implements OnInit {
                 }
             }
 
-            forkJoin( creates ).subscribe( () => {
+            this._creatingOverlays = true;
+
+            this.continueOnFailure( forkJoin( creates ) ).subscribe( () => {
 
                 this.ipcService.updateEnableFct( this.enableFct );
                 
@@ -343,7 +353,8 @@ export class SetupWizardComponent implements OnInit {
 
                 this.ipcService.showArrangeOverlaysDialog().subscribe( () => { } );
 
-                this.ipcService.initializeFctCombatGroups( { fctOutId: this._fctOutId, fctInId: this._fctInId } ).subscribe( () => {
+                this.continueOnFailure( this.ipcService.initializeFctCombatGroups( { fctOutId: this._fctOutId, fctInId: this._fctInId } ) ).subscribe( () => {
+                    this._creatingOverlays = false;
                     this.stepper.next();
                 } );
             } );
@@ -363,5 +374,27 @@ export class SetupWizardComponent implements OnInit {
         console.log( 'why no complete?' );
         this.ipcService.saveSetupCompleted( true );
         this.dialogRef.close( true );
+    }
+
+    cancel() {
+        // Saved first, so that the wizard won't open on the next launch even if this dialog
+        // fails to close.  It can still be run from the Settings tab.
+        this.ipcService.saveSetupCompleted( true );
+        this.dialogRef.close( null );
+    }
+
+    /**
+     * Stops the wizard from waiting forever when a step fails or the main process never replies.
+     *
+     * @param step The setup step to wait on.
+     */
+    private continueOnFailure<T>( step: Observable<T> ): Observable<T | null> {
+        return step.pipe(
+            timeout( setupStepTimeoutMs ),
+            catchError( error => {
+                console.error( '[SetupWizard] Continuing after a failed setup step.', error );
+                return of( null );
+            } )
+        );
     }
 }

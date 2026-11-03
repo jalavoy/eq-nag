@@ -3,6 +3,7 @@ const Store = require( './store' );
 const ForwardRef = require( '../forward-ref' );
 const _ = require( 'lodash' );
 const customAlphabet = require( 'nanoid' ).customAlphabet;
+const log = require( 'electron-log' );
 const alphabet = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
 const idLen = 16;
 const nanoid = customAlphabet( alphabet, 16 );
@@ -385,6 +386,8 @@ class OverlayDatabaseStore extends Store {
      * @param {string | undefined} fctInId overlay id for incoming FCT combat groups.
      */
     initializeFctCombatGroups( fctOutId, fctInId ) {
+        this.#data.fctCombatGroups = this.#data.fctCombatGroups ?? [];
+
         let criticalsGroup = Object.assign( new FctCombatGroup(), defaultCriticalsGroup );
         criticalsGroup.combatGroupId = nanoid();
         criticalsGroup.overlayId = fctOutId ?? this.#userPrefDb.damageDealtOverlayId;
@@ -772,8 +775,15 @@ class OverlayDatabaseStore extends Store {
              * @param {{fctOutId?: string, fctInId?: string} | undefined} data The data to initialize the FCT combat groups.
              */
             ( event, data ) => {
-                this.initializeFctCombatGroups( data?.fctOutId, data?.fctInId );
-                event.sender.send( 'overlay:initialize-fct', true );
+                // Always reply, the setup wizard is waiting on this before it can continue.
+                let success = true;
+                try {
+                    this.initializeFctCombatGroups( data?.fctOutId, data?.fctInId );
+                } catch ( error ) {
+                    log.error( '[OverlayDatabase] Could not initialize the FCT combat groups.', error );
+                    success = false;
+                }
+                event.sender.send( 'overlay:initialize-fct', success );
             } );
         
         // TODO: Figure out wtf this was?

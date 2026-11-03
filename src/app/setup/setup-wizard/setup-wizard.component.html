@@ -91,7 +91,7 @@
 <mat-dialog-actions>
     
     <div>
-        <button mat-button [mat-dialog-close]="null" class="t-confirm-no" color="warn">Cancel Setup Wizard</button>
+        <button mat-button (click)="cancel()" class="t-confirm-no" color="warn">Cancel Setup Wizard</button>
 
         <span class="spacer"></span>
 
