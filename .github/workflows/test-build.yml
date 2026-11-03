@@ -3,10 +3,10 @@ name: Test build
 # Builds a testers-only release: Actions -> Test build -> Run workflow.
 #
 # The version is chosen automatically: the next build number with a beta
-# suffix, e.g. 0.2.27-beta.1, then 0.2.27-beta.2.  The release (tag
+# suffix, e.g. 0.3.1-beta.1, then 0.3.1-beta.2.  The release (tag
 # test-<version>) is published but is neither a pre-release nor the latest
 # release, and it has no latest.yml, so no copy of Nag updates to it.  Hand the
-# download link to testers; once 0.2.27 is out, their build updates to it.
+# download link to testers; once 0.3.1 is out, their build updates to it.
 #
 # It has two portables and no installer:
 #   eq_nag_portable.exe       the same as a release build (no performance taps)

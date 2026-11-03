@@ -8,6 +8,9 @@ name: Release
 # Review it, then click Publish release (it's already labeled Latest); every
 # copy of Nag then updates to it.
 #
+# Not needed when a draft from the Pre-release workflow was published as the
+# latest release; that workflow's notes say how.
+#
 # Only people with write access to the repo can run this workflow.
 
 on:

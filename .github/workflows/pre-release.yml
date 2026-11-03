@@ -11,6 +11,9 @@ name: Pre-release
 # Running it again before publishing rebuilds the same version from the newer
 # code and adds only the new changes; your edits to the notes are kept.
 #
+# To release this build to everyone without a rebuild, untick "Set as a
+# pre-release" and tick "Set as the latest release" before publishing.
+#
 # Only people with write access to the repo can run this workflow.
 
 on:
