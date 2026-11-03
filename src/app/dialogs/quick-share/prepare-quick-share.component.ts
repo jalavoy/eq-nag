@@ -4,16 +4,12 @@ import { Component, OnInit, Inject } from '@angular/core';
 import { MatDialog, MatDialogRef, MAT_DIALOG_DATA } from '@angular/material/dialog';
 import { MatTree, MatTreeFlatDataSource, MatTreeFlattener } from '@angular/material/tree';
 import { combineLatest, forkJoin, Observable } from 'rxjs';
-import { AuthorModel, OverlayWindowModel, PackageFileModel, PackageFolder, PackageTrigger, QuickShareFileModel, QuickShareModel, TriggerAction, TriggerFolder, TriggerModel } from 'src/app/core.model';
+import { OverlayWindowModel, PackageFileModel, PackageFolder, PackageTrigger, QuickShareFileModel, QuickShareModel, TriggerAction, TriggerFolder, TriggerModel } from 'src/app/core.model';
 import { IpcService } from 'src/app/ipc.service';
 import { PrepareQuickShareModel } from '../dialog.model';
 import * as _ from 'lodash-es';
-import { QuickShareService } from 'src/app/core/quick-share.service';
-import { SettingsService } from 'src/app/settings/settings-http.service';
-import { AuthorDialogComponent } from '../author-dialog/author-dialog.component';
 import { NotificationDialogComponent } from '../notification-dialog/notification-dialog.component';
 import { NotificationTypes } from '../notification-dialog/notification-dialog.model';
-import { HttpErrorResponse } from '@angular/common/http';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { getPackageImportProperties } from 'src/app/core.decorators';
 
@@ -77,8 +73,6 @@ export class PrepareQuickShareDialogComponent implements OnInit {
         @Inject( MAT_DIALOG_DATA ) public data: PrepareQuickShareModel,
         public dialog: MatDialog,
         private ipcService: IpcService,
-        private quickShareService: QuickShareService,
-        private settingsService: SettingsService,
         private snackBar: MatSnackBar,
     ) { }
 
@@ -384,43 +378,10 @@ export class PrepareQuickShareDialogComponent implements OnInit {
 
 
     /**
-     * Creates the quickshare object and submits the quickshare to the nag 
-     * service to generate an id.
+     * Creates the quickshare object and saves it to a share file.
      */
     createQuickShare(): void {
         this.creatingQuickShare = true;
-
-        // If the current user has already created their author account, then 
-        // that record is used, otherwise the user is presented with a dialog 
-        // to create their account.
-        let authorObs = new Observable<AuthorModel>( observer => {
-            this.ipcService.getAuthor().subscribe( author => {
-                
-                if ( author?.authorId ) {
-                    observer.next( author );
-                    observer.complete();
-
-                } else {
-
-                    // Show author dialog to pull in name and? discord information.
-                    this.dialog.open<AuthorDialogComponent, any, AuthorModel>( AuthorDialogComponent, {
-                        width: '450px',
-                        panelClass: 'app-dialog',
-                    } ).afterClosed().subscribe( authorName => {
-
-                        this.settingsService
-                            .createAuthor( authorName.name, authorName.discord )
-                            .subscribe( newAuthor => {
-                                this.ipcService.saveAuthor( newAuthor );
-                                observer.next( newAuthor );
-                                observer.complete();
-                            } );
-
-                    } );
-                }
-
-            } );
-        } );
 
         let dataObservables = [
             this.ipcService.getTriggers(),
@@ -431,13 +392,12 @@ export class PrepareQuickShareDialogComponent implements OnInit {
             this.ipcService.getAlertOverlayId(),
             this.ipcService.getOverlayWindows(),
             this.ipcService.getPrimaryDisplay(),
-            authorObs,
         ];
 
         // combineLatest will wait for the next value in each observable, but 
         // doesn't require the observables to be completed.
         combineLatest( dataObservables ).subscribe(
-            ( [ triggers, folders, audioFiles, detrimentalOverlayId, beneficialOverlayId, textOverlayId, overlays, primaryDisplay, author ]: [ TriggerModel[], TriggerFolder[], PackageFileModel[], string, string, string, OverlayWindowModel[], Electron.Display, AuthorModel ] ) => {
+            ( [ triggers, folders, audioFiles, detrimentalOverlayId, beneficialOverlayId, textOverlayId, overlays, primaryDisplay ]: [ TriggerModel[], TriggerFolder[], PackageFileModel[], string, string, string, OverlayWindowModel[], Electron.Display ] ) => {
 
                 // Pulls the selected triggers and folders into quickshare data
                 // formats.
@@ -494,35 +454,45 @@ export class PrepareQuickShareDialogComponent implements OnInit {
                     } );
                 } );
 
-                // Submits the final quickshare to the server to generate a 
-                // quickShareId.
-                this.quickShareService
-                    .createQuickShare( author.authorId, quickShare, quickShareFiles, null )
-                    .subscribe( quickShareId => {
-                        let code = `{NAG:quick-share/${quickShareId}}`;
-                        this.ipcService.sendTextToClipboard( code );
-                        this.snackBar.open( 'Quickshare copied to clipboard', 'Dismiss', { duration: 5000 } );
-                        this.dialogRef.close( quickShareId );
-                    } );
-                
-                this.creatingQuickShare = false;
+                // Saves the final quickshare to a file that the user can send to others.
+                const suggestedName = quickShareTriggers.length === 1 ? quickShareTriggers[ 0 ].name : this.data.folders?.[ 0 ]?.name;
 
-            }, ( err: HttpErrorResponse | string ) => {
-                
-                this.dialog.open( NotificationDialogComponent, {
-                    width: '450px',
-                    data: {
-                        title: `Error`,
-                        message: [ 'An error was thrown while attempting the request.', err instanceof HttpErrorResponse ? err.error?.Message ?? 'Unknown Error' : err ],
-                        notificationType: NotificationTypes.Error,
-                    },
-                    panelClass: 'app-dialog',
-                } ).afterClosed().subscribe();
-                
+                this.ipcService
+                    .exportShareFile( 'triggers', quickShare, quickShareFiles, suggestedName )
+                    .subscribe( result => {
+                        this.creatingQuickShare = false;
+
+                        if ( result.error ) {
+                            this.showError( result.error );
+
+                        } else if ( !result.canceled ) {
+                            this.snackBar.open( 'Triggers exported to file', 'Dismiss', { duration: 5000 } );
+                            this.dialogRef.close();
+                        }
+                    } );
+
+            }, ( err: any ) => {
+                this.showError( `${err?.message ?? err}` );
                 this.creatingQuickShare = false;
-                
             } );
 
+    }
+
+    /**
+     * Shows the given error message to the user.
+     *
+     * @param message The error message.
+     */
+    private showError( message: string ): void {
+        this.dialog.open( NotificationDialogComponent, {
+            width: '450px',
+            data: {
+                title: `Error`,
+                message: [ 'An error was thrown while attempting the request.', message ],
+                notificationType: NotificationTypes.Error,
+            },
+            panelClass: 'app-dialog',
+        } ).afterClosed().subscribe();
     }
     
 }

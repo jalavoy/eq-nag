@@ -38,11 +38,6 @@ runs:
         VERSION: ${{ inputs.version }}
       run: npm version "$VERSION" --no-git-tag-version --allow-same-version
 
-    # Point the app at the production API (config.json.production -> config.json)
-    - name: Set production config
-      shell: bash
-      run: npm run set-production-env
-
     - name: Build Angular (production)
       shell: bash
       run: npx ng build --configuration=production

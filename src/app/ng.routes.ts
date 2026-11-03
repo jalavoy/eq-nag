@@ -3,7 +3,6 @@ import { Routes } from '@angular/router';
 import { MainComponent } from './main.component';
 import { OverlayEditorDialogComponent } from './dialogs/overlay-editor-dialog/overlay-editor-dialog.component';
 import { GinaImportWindowComponent } from './windows/gina-import-window/gina-import-window.component';
-import { TriggerLibraryWindowComponent } from './windows/trigger-library-window/trigger-library-window.component';
 import { MoveOverlaysDialogComponent } from './dialogs/move-overlays-dialog/move-overlays-dialog.component';
 import { UpdateNotesWindowComponent } from './windows/update-notes-window/update-notes-window.component';
 import { LogSimulatorComponent } from './windows/log-simulator/log-simulator.component';
@@ -75,7 +74,6 @@ import { SettingsWindowComponent } from './windows/settings-window/settings-wind
 
 let _routes: Routes = [
     { path: 'dashboard', component: MainComponent },
-    { path: 'trigger/library', component: TriggerLibraryWindowComponent },
     { path: 'trigger/new', component: TriggerDialogComponent },
     { path: 'trigger/new/:folderId', component: TriggerDialogComponent },
     { path: 'trigger/:id', component: TriggerDialogComponent },

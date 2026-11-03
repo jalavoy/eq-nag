@@ -6,7 +6,6 @@ import { CharacterModel } from 'src/app/core.model';
 import { nagId } from 'src/app/core/nag-id.util';
 import { DialogService } from 'src/app/dialogs/dialog.service';
 import { IpcService } from 'src/app/ipc.service';
-import { SettingsService } from 'src/app/settings/settings-http.service';
 import { StringUtility } from 'src/app/utilities';
 
 // TODO: Move away from highlighting the current line and instead highlight all lines at the current second.  And remove the intervals, scrolling the last element into view immediately.
@@ -80,7 +79,6 @@ export class LogSimulatorComponent implements OnInit {
         private readonly ipcService: IpcService,
         private readonly dialogService: DialogService,
         private readonly snackBar: MatSnackBar,
-        private readonly settingsService: SettingsService,
     ) { }
 
     ngOnInit() {

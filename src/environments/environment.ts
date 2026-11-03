@@ -5,7 +5,6 @@ import { EnvironmentModel } from './environment.model';
 
 export const environment: EnvironmentModel = {
     production: false,
-    shareServiceUrl: 'http://api.guildantix.local',
 };
 
 /*

@@ -636,7 +636,7 @@ export class ReceiveQuickShareDialogComponent implements OnInit {
             } );
 
             forkJoin( installTasks ).subscribe( results => {
-                this.snackBar.open( 'Quick Share(s) installed!', 'dismiss', { duration: 2500 } );
+                this.snackBar.open( 'Triggers imported!', 'dismiss', { duration: 2500 } );
                 this.ipcService.requestTick();
                 
                 this.dialogRef.close( true );

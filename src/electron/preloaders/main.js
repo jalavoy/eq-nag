@@ -33,8 +33,6 @@ const channelPrefixes = [
     'zones',
     'color',
     'orphaned_trigger_warning',
-    'quickshare_captured',
-    'quicksharePackage_captured',
     'update_downloaded',
     'ask_combat_group_migration',
     'dialog',
@@ -46,7 +44,6 @@ const channelPrefixes = [
     'simulation',
     'cache',
     'combat-database',
-    'chat-room',
     'combat',
     'show-settings',
 ];

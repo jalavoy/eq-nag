@@ -4,7 +4,6 @@ import { MatStepper } from '@angular/material/stepper';
 import { ActivatedRoute } from '@angular/router';
 import { DialogService } from 'src/app/dialogs/dialog.service';
 import { IpcService } from 'src/app/ipc.service';
-import { SettingsService } from 'src/app/settings/settings-http.service';
 
 @Component( {
     selector: 'settings-window',
@@ -20,7 +19,6 @@ export class SettingsWindowComponent implements OnInit {
         private readonly ipcService: IpcService,
         private readonly dialogService: DialogService,
         private readonly snackBar: MatSnackBar,
-        private readonly settingsService: SettingsService,
         private readonly route: ActivatedRoute,
     ) { }
 

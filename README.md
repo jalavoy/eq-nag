@@ -9,6 +9,13 @@ Download Nag only from the
 [Releases page](https://github.com/jdewittwright/eq-nag/releases). After you
 install it, Nag updates itself.
 
+## Sharing triggers
+
+Right-click a trigger or folder and choose **Export to File**, then send the
+`.nagshare` file to another player. They choose **Import from File** in the
+Triggers tab's menu, and pick which triggers to install. Only import files from
+people you trust.
+
 ## Is this download safe?
 
 Every installer is built automatically by GitHub Actions from the public

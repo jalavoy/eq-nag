@@ -18,7 +18,6 @@ import { WindowsModule } from './windows/windows.module';
 import { IpcService } from './ipc.service';
 import { CoreModule } from './core/core.module';
 import { SettingsComponent } from './settings/settings-component/settings.component';
-import { SettingsService } from './settings/settings-http.service';
 import { SetupModule } from './setup/setup.module';
 import { SetupWizardComponent } from './setup/setup-wizard/setup-wizard.component';
 import { SetupService } from './setup/setup.service';
@@ -76,7 +75,6 @@ import { QuickActionsComponent } from './quick-actions/quick-actions.component';
     providers: [
         ScraperService,
         IpcService,
-        SettingsService,
         SetupService,
     ],
     bootstrap: [ AppComponent ],

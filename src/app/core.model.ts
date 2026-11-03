@@ -70,14 +70,6 @@ export enum ActionTypes {
 
 }
 
-export enum QuickShareAuthorListTypes {
-    
-    Disabled = 0,
-    Whitelist = 1,
-    Blacklist = 2,
-
-}
-
 export const actionOverlayMap: Record<number, 'Log' | 'Alert' | 'Timer' | 'FCT' | 'Chart' | ''> = {
     0: 'Alert',
     1: '',
@@ -672,9 +664,6 @@ export class DataTickModel {
     public ignoredGinaObjects: string[] = [];
     public folders: TriggerFolder[] = [];
     public fctStyles: FctStylesModel;
-    public enableQuickShareImports: boolean = true;
-    public quickShareAuthorsListType: QuickShareAuthorListTypes;
-    public quickShareAuthorsList: string[] = [];
     public baseSpeakingRate: number = 1;
     public characterDisabledTriggers: {
         characterId: any;
@@ -1432,6 +1421,40 @@ export class QuickShareFctModel {
 
 }
 
+/** The types of data that can be shared with a share file. */
+export type ShareFileType = 'triggers' | 'fct';
+
+/**
+ * The contents of a share file.
+ */
+export class ShareFileModel {
+
+    public format: string;
+    public formatVersion: number;
+    public type: ShareFileType;
+    public shareId: string;
+    public versionId: string;
+    public exportedAt: string;
+    public model: any;
+    public files: PackageFileModel[] = [];
+
+}
+
+export class ShareFileExportResult {
+
+    public canceled: boolean;
+    public error?: string;
+
+}
+
+export class ShareFileImportResult {
+
+    public canceled: boolean;
+    public share?: ShareFileModel;
+    public error?: string;
+
+}
+
 export class QuickShareModel {
     
     public triggers: PackageTrigger[] = [];
@@ -1467,21 +1490,6 @@ export class QuickShareMetaModel {
     public trustedAuthor: boolean = false;
     public stageNewTriggers: boolean = false;
 
-}
-
-export class QuickShareTransferModel {
-
-    public model: any;
-    public notes: string;
-    public files: QuickShareFileModel[] = [];
-    
-}
-
-export class QuickShareFctTransferModel {
-
-    public model: any;
-    public notes: string;
-    
 }
 
 export class QuickShareVersion {
@@ -1945,22 +1953,6 @@ export class ServerCombatModel {
     public verifiedNpcs: string[] = [];
     public verifiedPets: string[] = [];
     public petOwners: Record<string, string> = {};
-
-}
-
-export class ServerConsoleMessage {
-    
-    public message: string;
-    public cssClass?: string;
-    public timestamp: Date;
-
-}
-
-export class ChatRoomLinkReceivedEventArgs {
-    
-    public link: string;
-    public player: string;
-    public server: string;
 
 }
 

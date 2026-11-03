@@ -2,22 +2,17 @@ import { Component, ViewChild, ElementRef, OnInit } from '@angular/core';
 import * as _ from 'lodash-es';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { IpcService } from './ipc.service';
-import { DkpEntryModel, OverlayWindowModel, FocusEffectSettings, StylePropertiesModel, FctStylesModel, QuickShareMetaModel, QuickShareFileModel, TriggerPackageMetaModel, VersionNumber, AuthorModel, SettingsKeys } from './core.model';
+import { DkpEntryModel, OverlayWindowModel, FocusEffectSettings, StylePropertiesModel, FctStylesModel, VersionNumber } from './core.model';
 import { DialogService } from './dialogs/dialog.service';
 import { customAlphabet } from 'nanoid';
 import { SetupService } from './setup/setup.service';
 import { CharactersListComponent } from './characters-list/characters-list.component';
-import { TriggerLibraryService } from './windows/trigger-library.service';
-import { forkJoin, Observable, timer } from 'rxjs';
 import { ColoredString } from './dialogs/dialog.model';
 import { SettingsComponent } from './settings/settings-component/settings.component';
-import { QuickShareService } from './core/quick-share.service';
 import { TriggersComponent } from './triggers/triggers.component';
-import { JoinChatRoomDialogResult } from './dialogs/join-chat-room-dialog/join-chat-room-dialog.component';
 
 const alphabet = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
 const nanoid = customAlphabet( alphabet, 16 );
-const updateIntervalDuration = 5 * 60 * 1000;
 
 @Component( {
     selector: 'app-main',
@@ -54,7 +49,6 @@ export class MainComponent implements OnInit {
     public combatType: string = 'DmgOut';
     public fctStyles: FctStylesModel = null;
 
-    public connected: boolean = false;
     public transmitPercent: number | null = null;
     public transmitLabel: string | null = null;
     public archivePercent: number |  null = null;
@@ -76,8 +70,6 @@ export class MainComponent implements OnInit {
         private readonly ipcService: IpcService,
         private readonly dialogService: DialogService,
         private readonly setupService: SetupService,
-        private readonly libraryService: TriggerLibraryService,
-        private readonly quickShareService: QuickShareService,
     ) {
     }
 
@@ -133,64 +125,7 @@ export class MainComponent implements OnInit {
         this.ipcService.consoleLogRequested().subscribe( data => console.log( 'from main', data ) );
         this.ipcService.getAppIsDev().subscribe( isDev => this.isDev = isDev );
         
-        this.checkForTriggerUpdates();
         this.ipcService.mainWindowAngularReady();
-
-        this.ipcService.quickShareCaptured().subscribe( quickShareId => {
-
-            this.ipcService.getAuthor().subscribe( author => {
-            
-                let observables = [
-                    this.quickShareService.isAuthorOfQuickShare( author?.authorId, quickShareId ),
-                    this.quickShareService.getQuickShare( quickShareId ),
-                    this.quickShareService.getQuickShareFiles( quickShareId ),
-                ];
-    
-                forkJoin( observables )
-                    .subscribe( ( [ isAuthor, quickShare, files ]: [ boolean, QuickShareMetaModel[], QuickShareFileModel[] ] ) => {
-                        if ( !isAuthor ) {
-                            this.dialogService.showReceiveQuickShareDialog( quickShare, files ).subscribe( imported => {
-                                if ( imported ) {
-                                    this.ipcService.requestTick();
-                                }
-                            } );
-                        }
-                    } );
-                
-            } );
-            
-        } );
-
-        this.ipcService.quickSharePackageCaptured().subscribe( packageId => {
-
-            // Start by grabbing all installed packages and checking if the package has already been installed.
-            this.ipcService.getInstalledPackages().subscribe( installedPkgs => {
-                let exists = installedPkgs.findIndex( f => f.packageId === packageId ) > -1;
-
-                if ( !exists ) {
-
-                    // If the package is new, then ask the user if the would like to have it installed.
-                    this.libraryService.getPackage( packageId ).subscribe( pkg => {
-                        this.dialogService.showConfirmDialog(
-                            [ `${pkg[ 0 ].name}`, 'Would you like to install this package?' ],
-                            'Click "Yes" to install this new package.',
-                            'Click "No" to close this window without installing the new package.',
-                            confirmed => {
-                                
-                                if ( confirmed ) {
-
-                                    // If the user agrees, then install the package.
-                                    this.triggersList.installTriggerPackage( packageId );
-
-                                }
-
-                            } );
-                    } );
-
-                }
-            } );
-
-        } );
 
         this.ipcService.orphanedTriggersFound().subscribe( found => {
             if ( found ) {
@@ -296,65 +231,10 @@ export class MainComponent implements OnInit {
             }
         } );
 
-        this.ipcService.onChatRoomConnected().subscribe( () => this.connected = true );
-        this.ipcService.onChatRoomDisconnected().subscribe( reason => {
-            this.connected = false;
-            this.dialogService.showCustomNotificationDialog( 'Disconnected', [ 'You have been disconnected from the server.', `Reason: ${reason}` ], 'public_off' );
-        } );
-
         window.setTimeout( () => {
             // TODO: I don't think this is functionally doing anything.
             this.ipcService.mainWindowLoaded();
         }, 60 * 1000 );
-
-        // Handles the chat room link received event.
-        this.ipcService.onReceivedChatRoomLink().subscribe( linkArgs => {
-            this.dialogService.showJoinChatRoomDialog( linkArgs.server, linkArgs.player ).subscribe( result => {
-
-                if ( result === JoinChatRoomDialogResult.Trust ) {
-                    // If the user trusts the player, add them to the trusted list.
-                    this.ipcService.getSetting<Record<string, string[]>>( SettingsKeys.serverTrustedPlayers, false ).subscribe( trustedPlayers => {
-                        if ( !trustedPlayers ) {
-                            trustedPlayers = {};
-                        }
-
-                        if ( !trustedPlayers[ linkArgs.server ] ) {
-                            trustedPlayers[ linkArgs.server ] = [];
-                        }
-
-                        if ( trustedPlayers[ linkArgs.server ].indexOf( linkArgs.player ) === -1 ) {
-                            trustedPlayers[ linkArgs.server ].push( linkArgs.player );
-                        }
-
-                        this.ipcService.updateSetting( SettingsKeys.serverTrustedPlayers, trustedPlayers );
-                    } );
-                }
-
-                if ( result === JoinChatRoomDialogResult.Block ) {
-                    // If the user blocks the player, add them to the blocked list.
-                    this.ipcService.getSetting<Record<string, string[]>>( SettingsKeys.serverBlockedPlayers, false ).subscribe( blockedPlayers => {
-                        if ( !blockedPlayers ) {
-                            blockedPlayers = {};
-                        }
-
-                        if ( !blockedPlayers[ linkArgs.server ] ) {
-                            blockedPlayers[ linkArgs.server ] = [];
-                        }
-
-                        if ( blockedPlayers[ linkArgs.server ].indexOf( linkArgs.player ) === -1 ) {
-                            blockedPlayers[ linkArgs.server ].push( linkArgs.player );
-                        }
-
-                        this.ipcService.updateSetting( SettingsKeys.serverBlockedPlayers, blockedPlayers );
-                    } );
-                }
-
-                if ( result === JoinChatRoomDialogResult.Trust || result === JoinChatRoomDialogResult.Join ) {
-                    // If the user trusts or joins the player, then join the chat room.
-                    this.ipcService.joinChatRoom( linkArgs.link );
-                }
-            } );
-        } );
 
     }
 
@@ -372,95 +252,6 @@ export class MainComponent implements OnInit {
      */
     public showLatestUpdateNotes( version: string | undefined = undefined ) {
         this.ipcService.showUpdateNotesWindow( version ? `v${version}` : undefined );
-    }
-
-
-
-
-
-
-
-
-
-
-    /**
-     * Checks for trigger updates.
-     */
-    checkForTriggerUpdates() {
-        this.ipcService.getInstalledPackages().subscribe( installedPackages => {
-            if ( installedPackages?.length > 0 ) {
-                let ids = installedPackages.map( f => f.packageId );
-
-                this.libraryService.getLatestVersionInfo( ids ).subscribe( infos => {
-                    let packagesWithUpdates: string[] = [];
-
-                    // Check each package for udpates.
-                    infos?.forEach( latestInfo => {
-                        let currentInfo = installedPackages.find( f => f.packageId === latestInfo.TriggerPackageId );
-                        if ( currentInfo.versionId !== latestInfo.CurrentVersionId ) {
-                            packagesWithUpdates.push( currentInfo.packageId );
-                        }
-                    } );
-
-                    if ( packagesWithUpdates?.length > 0 ) {
-                        
-                        let sb = this.snackBar.open( `There are updates to ${packagesWithUpdates.length + 1} trigger package(s).  Installing updates in the background.`, 'dismiss', { duration: 5000 } );
-
-                        this.libraryService
-                            .getPackage( packagesWithUpdates )
-                            .subscribe( packages => {
-                                let installedCount = 0;
-
-                                const installPackage = ( pkg: TriggerPackageMetaModel ) => {
-                                    this.libraryService
-                                        .getPackageFiles( pkg.triggerPackageId )
-                                        .subscribe( packageFiles => {
-                                            
-                                            this.ipcService.getAudioFiles().subscribe( existingAudioFiles => {
-                                                // Adding a timer makes the following easier and I'm being lazy today.
-                                                let importTasks: Observable<any>[] = [ timer( 1 ) ];
-                                    
-                                                // We need to install all new files.
-                                                packageFiles?.forEach( file => {
-                                                    if ( existingAudioFiles.findIndex( f => f.fileId === file.fileId ) === -1 ) {
-                                                        // If the package file doesn't exist, install it.
-                                                        importTasks.push( this.ipcService.importPackageFile( file ) );
-                                                    }
-                                                } );
-        
-                                                forkJoin( importTasks ).subscribe( results => {
-                                                    // Missing package overlays are caught in the main component's ngInit event.
-                                                    this.ipcService.installTriggerPackage( pkg ).subscribe( installComplete => {
-                                                        installedCount += 1;
-                                                        if ( installedCount < packages?.length ) {
-                                                            installPackage( packages[ installedCount ] );
-                                                        } else {
-                                                            sb?.dismiss();
-                                                            this.snackBar.open( 'All updates installed successfully!', 'dismiss', { duration: 5000 } );
-                                                            this.ipcService.requestTick();
-                                                            window.setTimeout( () => this.checkForTriggerUpdates(), updateIntervalDuration );
-                                                        }
-                                                    } );
-                                                } );
-                                            
-                                            } );
-                                            
-                                        } );
-                                }
-
-                                // Let's kick-off the first update.
-                                installPackage( packages[ installedCount ] );
-
-                            } );
-                        
-                    } else {
-                        window.setTimeout( () => this.checkForTriggerUpdates(), updateIntervalDuration );
-
-                    }
-
-                } );
-            }
-        } );
     }
 
     runSetupWizard() {
@@ -564,10 +355,6 @@ export class MainComponent implements OnInit {
         this.ipcService.showEasyWindow().subscribe();
     }
 
-    public disconnectChatRoom(): void {
-        this.ipcService.disconnectChatRoom();
-    }
-
     public testFn(): void {
         // large file test: E:\\EverQuest\\Logs\\backup\\20220721\\eqlog_Halifor_rizlona.txt
         
@@ -575,21 +362,6 @@ export class MainComponent implements OnInit {
         // this.ipcService.findPlayerCharacterDeaths( 'E:\\EverQuest\\Logs\\eqlog_Ryvn_rizlona.txt' ).subscribe( deaths => console.log( 'deaths', deaths ) );
         // this.ipcService.findPlayerCharacterDeaths( 'E:\\EverQuest\\Logs\\eqlog_Israphel_rizlona.txt' ).subscribe( deaths => console.log( 'deaths', deaths ) );
         // this.ipcService.findPlayerCharacterDeaths( 'E:\\EverQuest\\Logs\\eqlog_Eryndhel_rizlona.txt' ).subscribe( deaths => console.log( 'deaths', deaths ) );
-        
-        // let quickShareId = 'OVtf9VzRSjykb1xx';
-        // let observables = [
-        //     this.quickShareService.getQuickShare( quickShareId ),
-        //     this.quickShareService.getQuickShareFiles( quickShareId ),
-        // ];
-
-        // forkJoin( observables )
-        //     .subscribe( ( [ quickShare, files ]: [ QuickShareMetaModel[], QuickShareFileModel[] ] ) => {
-        //         this.dialogService.showReceiveQuickShareDialog( quickShare, files ).subscribe( imported => {
-        //             if ( imported ) {
-        //                 // reload data.
-        //             }
-        //         } );
-        //     } );
         
         // this.ipcService.simulateLogParse( 'E:\\everquest\\Logs\\Backup\\eqlog_Ryvn_mangler_20201024_204401.txt' );
         // let url: string = 'https://everquest.allakhazam.com/db/spell.html?spell=5423';

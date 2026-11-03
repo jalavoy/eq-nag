@@ -9,7 +9,6 @@ const channelPrefixes = [
     'audio-file',
     'cache',
     'combat-database', 
-    'chat-room',
     'combat',
     'show-settings',
 ];

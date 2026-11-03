@@ -2,7 +2,7 @@ import { FlatTreeControl } from '@angular/cdk/tree';
 import { Component, ElementRef, HostListener, NgZone, OnInit, ViewChild } from '@angular/core';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatTreeFlatDataSource, MatTreeFlattener } from '@angular/material/tree';
-import { DeathRecapPreferences, ExternalDataSources, QuickShareFileModel, QuickShareMetaModel, Tag, TriggerAction, TriggerFolder, TriggerModel } from '../core.model';
+import { DeathRecapPreferences, ExternalDataSources, QuickShareMetaModel, Tag, TriggerAction, TriggerFolder, TriggerModel } from '../core.model';
 import { DialogService } from '../dialogs/dialog.service';
 import { IpcService } from '../ipc.service';
 import * as _ from 'lodash-es';
@@ -11,9 +11,7 @@ import { MatTable } from '@angular/material/table';
 import { customAlphabet } from 'nanoid';
 import { TableVirtualScrollDataSource } from 'ng-table-virtual-scroll';
 import { CdkVirtualScrollViewport } from '@angular/cdk/scrolling';
-import { BehaviorSubject, forkJoin, Observable, timer } from 'rxjs';
-import { TriggerLibraryService } from '../windows/trigger-library.service';
-import { QuickShareService } from '../core/quick-share.service';
+import { BehaviorSubject, Observable } from 'rxjs';
 import { FolderConditionsDialogComponent } from './folder-conditions-dialog/folder-conditions-dialog.component';
 import { MatDialog, MatDialogRef } from '@angular/material/dialog';
 const alphabet = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
@@ -101,8 +99,6 @@ export class TriggersComponent implements OnInit {
         private readonly ipcService: IpcService,
         private readonly dialogService: DialogService,
         private readonly ngZone: NgZone,
-        private readonly libraryService: TriggerLibraryService,
-        private readonly quickShareService: QuickShareService,
         private readonly dialog: MatDialog,
     ) {
         
@@ -1786,7 +1782,7 @@ export class TriggersComponent implements OnInit {
             disabled: () => false,
             hide: () => false,
         }, {
-            label: 'Quick Share',
+            label: 'Export to File',
             action: () => this.quickShareFolder( folderId ),
             disabled: () => false,
             hide: () => false,
@@ -2013,7 +2009,7 @@ export class TriggersComponent implements OnInit {
             disabled: () => false,
             hide: () => false,
         }, {
-            label: 'Quick Share',
+            label: 'Export to File',
             action: () => this.quickShareTrigger( trigger.triggerId ),
             disabled: () => false,
             hide: () => false,
@@ -2032,31 +2028,6 @@ export class TriggersComponent implements OnInit {
         } ];
     }
 
-
-
-
-
-
-
-
-
-    
-    /**
-     * Opens the trigger library window.
-     */
-    openTriggerLibrary() {
-        this.ipcService.showTriggerLibrary().subscribe( opened => { } );
-    }
-
-
-
-
-
-
-
-
-
-    
     /**
      * Opens the death recap manual log reading modal.
      */
@@ -2074,148 +2045,31 @@ export class TriggersComponent implements OnInit {
 
 
     /**
-     * Opens a model to allow the user to paste in quick share codes.
+     * Asks the user for a share file, and shows them the triggers in it.
      */
-    installMultiCode() {
-        this.dialogService
-            .showInputDialog(
-                'Install Quick Share',
-                [ 'To install a quick share or package, paste the code below' ],
-                'Package code',
-                'Paste in the quick share or package code',
-                null,
-                false )
-            .subscribe( response => {
-                if ( response ) {
-                    let handled = false;
+    importFromFile() {
+        this.ipcService.importShareFile( 'triggers' ).subscribe( result => {
+            if ( result.error ) {
+                this.dialogService.showErrorDialog( 'Import Failed', [ result.error ] );
 
-                    let pkg = /{NAG:package\/(?<packageId>.+?)}/g.exec( response );
-                    if ( pkg?.groups?.packageId ) {
-                        this.installTriggerPackage( pkg.groups.packageId );
-                        handled = true;
-                    }
+            } else if ( result.share ) {
+                let quickShare = Object.assign( new QuickShareMetaModel(), {
+                    quickShareId: result.share.shareId,
+                    versionId: result.share.versionId,
+                    timeStamp: new Date( result.share.exportedAt ),
+                    timestamp: new Date( result.share.exportedAt ),
+                    model: result.share.model,
+                } );
 
-                    let qs = /{NAG:(?!package\/)(quick-share\/)?(?<quickShareId>.+?)}/g.exec( response );
-                    if ( !handled && qs?.groups?.quickShareId ) {
-                        this.installQuickShare( qs.groups.quickShareId );
-                        handled = true;
-                    }
-
-                    if ( !handled ) {
-                        this.dialogService.showErrorDialog( 'Error', [ 'Could not parse code, no packages installed!' ] );
-                    }
-
-                }
-            } );
-    }
-
-
-
-
-
-
-
-
-
-
-    /**
-     * Installs the specified quick share.
-     * 
-     * @param quickShareId The id of the quick share.
-     */
-    installQuickShare( quickShareId: string ): void {
-
-        this.ipcService.getAuthor().subscribe( author => {
-            let observables = [
-                this.quickShareService.isAuthorOfQuickShare( author?.authorId, quickShareId ),
-                this.quickShareService.getQuickShare( quickShareId ),
-                this.quickShareService.getQuickShareFiles( quickShareId ),
-            ];
-    
-            forkJoin( observables )
-                .subscribe( ( [ isAuthor, quickShare, files ]: [ boolean, QuickShareMetaModel[], QuickShareFileModel[] ] ) => {
-                    if ( !isAuthor ) {
-                        this.dialogService.showReceiveQuickShareDialog( quickShare, files ).subscribe( imported => {
-                            if ( imported ) {
-                                this.ipcService.requestTick();
-                            }
-                        } );
+                this.dialogService.showReceiveQuickShareDialog( [ quickShare ], result.share.files ?? [] ).subscribe( imported => {
+                    if ( imported ) {
+                        this.ipcService.requestTick();
                     }
                 } );
-        } );
-        
-        
-    }
-
-
-
-
-
-
-
-
-
-
-    /**
-     * Installs the given package, if the package isn't already installed.
-     * 
-     * @param packageId The id of the package to install.
-     */
-    installTriggerPackage( packageId: string ): void {
-
-        this.ipcService.getInstalledPackages().subscribe( installedPkgs => {
-
-            // First, we check if the package is already installed, and if true show an error modal.
-            if ( installedPkgs.findIndex( f => f.packageId === packageId ) > -1 ) {
-                this.dialogService.showErrorDialog( 'Already Installed', [ 'That package has already been installed!' ] );
-
-            } else {
-
-                // Next, let's get the package information from the server.
-                this.libraryService.getPackage( [ packageId ] ).subscribe( packageMeta => {
-
-                    // This comes back as an array of packages, so let's just grab the first one.
-                    const pkg = packageMeta[ 0 ];
-
-                    // Next we need to download the package files from the web service.
-                    this.libraryService
-                        .getPackageFiles( packageId )
-                        .subscribe( packageFiles => {
-                    
-                            // Adding a timer makes the following easier and I'm being lazy forever-today-.
-                            let importTasks: Observable<any>[] = [ timer( 1 ) ];
-                    
-                            // Install all of the package files first.
-                            packageFiles?.forEach( file => {
-                                importTasks.push( this.ipcService.importPackageFile( file ) );
-                            } );
-                            
-                            // Finally, we can install the package itself after all of the package files have been installed.
-                            forkJoin( importTasks ).subscribe( results => {
-                                // Missing package overlays are caught in the main component's ngInit event.
-                                this.ipcService.installTriggerPackage( pkg ).subscribe( installComplete => {
-                                    this.snackBar.open( 'Package install complete!', 'dismiss', { duration: 2500 } );
-                                    this.ipcService.requestTick();
-                                } );
-                            } );
-                            
-                        } );
-                } );
-                
             }
         } );
-
     }
 
-
-
-
-
-
-
-
-
-    
     /**
      * Opens the gina importer window.
      */

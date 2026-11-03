@@ -1,6 +1,6 @@
 import { Component, DoCheck, KeyValueChanges, KeyValueDiffer, KeyValueDiffers, OnInit } from '@angular/core';
 import { DialogService } from '../dialogs/dialog.service';
-import { AuthorModel, FctCombatGroup, HitStartPositionTypes, OverlayWindowModel, QuickShareFctMetaModel, QuickShareFctModel, QuickShareFctTransferModel, StylePropertiesModel } from '../core.model';
+import { FctCombatGroup, HitStartPositionTypes, OverlayWindowModel, QuickShareFctModel, StylePropertiesModel } from '../core.model';
 import { nagId } from '../core/nag-id.util';
 import { IpcService } from '../ipc.service';
 import { MatCheckboxChange } from '@angular/material/checkbox';
@@ -8,10 +8,6 @@ import { QuestionDialogAnswerModel } from '../dialogs/question-dialog/question-d
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { Observable } from 'rxjs';
 import { ColoredString } from '../dialogs/dialog.model';
-import { QuickShareService } from '../core/quick-share.service';
-import { MatDialog } from '@angular/material/dialog';
-import { AuthorDialogComponent } from '../dialogs/author-dialog/author-dialog.component';
-import { SettingsService } from '../settings/settings-http.service';
 
 // TODO: FCT Features
 // 1. Consolidation configuration settings: by time and by source.
@@ -53,9 +49,6 @@ export class FloatingCombatTextComponent implements OnInit, DoCheck {
         private readonly ipcService: IpcService,
         private readonly snackBar: MatSnackBar,
         private readonly differs: KeyValueDiffers,
-        private readonly quickShareService: QuickShareService,
-        private readonly dialog: MatDialog,
-        private readonly settingsService: SettingsService,
     ) { }
 
     ngOnInit() {
@@ -163,58 +156,21 @@ export class FloatingCombatTextComponent implements OnInit, DoCheck {
 
 
     /**
-     * Creates a quick share code for the current FCT configuration.
+     * Exports the current FCT configuration to a share file.
      */
-    createQuickShare(): void {
-        
-        // If the current user has already created their author account, then 
-        // that record is used, otherwise the user is presented with a dialog 
-        // to create their account.
-        let authorObs = new Observable<AuthorModel>( observer => {
-            this.ipcService.getAuthor().subscribe( author => {
-                
-                if ( author?.authorId ) {
-                    observer.next( author );
-                    observer.complete();
+    exportToFile(): void {
+        let model = new QuickShareFctModel();
+        model.fctGroups = this.combatGroups.slice();
+        model.overlays = this.overlays.filter( x => model.fctGroups.findIndex( y => y.overlayId === x.overlayId ) > -1 );
+        model.primaryDisplaySize = window.api.utils.screens.primaryDisplaySize();
 
-                } else {
+        this.ipcService.exportShareFile( 'fct', model, [], 'nag-fct-settings' ).subscribe( result => {
+            if ( result.error ) {
+                this.dialogService.showErrorDialog( 'Export Failed', [ result.error ] );
 
-                    // Show author dialog to pull in name and? discord information.
-                    this.dialog.open<AuthorDialogComponent, any, AuthorModel>( AuthorDialogComponent, {
-                        width: '450px',
-                        panelClass: 'app-dialog',
-                    } ).afterClosed().subscribe( authorName => {
-
-                        this.settingsService
-                            .createAuthor( authorName.name, authorName.discord )
-                            .subscribe( newAuthor => {
-                                this.ipcService.saveAuthor( newAuthor );
-                                observer.next( newAuthor );
-                                observer.complete();
-                            } );
-
-                    } );
-                }
-
-            } );
-        } );
-
-        authorObs.subscribe( author => {
-            let model = new QuickShareFctModel();
-            model.fctGroups = this.combatGroups.slice();
-            model.overlays = this.overlays.filter( x => model.fctGroups.findIndex( y => y.overlayId === x.overlayId ) > -1 );
-            model.primaryDisplaySize = window.api.utils.screens.primaryDisplaySize();
-    
-            let transfer = new QuickShareFctTransferModel();
-            transfer.model = model;
-            transfer.notes = '';
-    
-            this.quickShareService.createQuickShareFct( author.authorId, model, '' ).subscribe( quickShareId => {
-                let quickShareCode = `{NAG:fct/${quickShareId}}`;
-                this.ipcService.sendTextToClipboard( quickShareCode );
-                this.snackBar.open( 'Quick share code copied to clipboard', 'Dismiss', { duration: 3000 } );
-            } );
-            
+            } else if ( !result.canceled ) {
+                this.snackBar.open( 'Settings exported to file', 'Dismiss', { duration: 3000 } );
+            }
         } );
     }
 
@@ -228,54 +184,15 @@ export class FloatingCombatTextComponent implements OnInit, DoCheck {
 
 
     /**
-     * Opens the quick share dialog and allows the user to enter in a quick share code for FCT.
+     * Asks the user for a share file, and installs the combat groups in it.
      */
-    installQuickShare(): void {
-        this.dialogService
-            .showInputDialog(
-                'Install Quick Share',
-                [ 'To install shared combat groups, paste the code below' ],
-                'Quick share code',
-                'Paste in the quick share code',
-                null,
-                false )
-            .subscribe( response => {
-                if ( response ) {
-                    let handled = false;
+    importFromFile(): void {
+        this.ipcService.importShareFile( 'fct' ).subscribe( result => {
+            if ( result.error ) {
+                this.dialogService.showErrorDialog( 'Import Failed', [ result.error ] );
 
-                    // {NAG:fct/a3fASS34127BGggsr1}
-                    let pkg = /{NAG:fct\/(?<packageId>.+?)}/g.exec( response );
-                    if ( pkg?.groups?.packageId ) {
-                        this.installFctPackage( pkg.groups.packageId );
-                        handled = true;
-                    }
-
-                    if ( !handled ) {
-                        this.dialogService.showErrorDialog( 'Error', [ 'Could not parse code, no packages installed!' ] );
-                    }
-
-                }
-            } );
-    }
-
-
-
-
-
-
-
-
-
-
-    /**
-     * Installs the specified combat group package.
-     * 
-     * @param packageId The id of the FCT combat groups package.
-     */
-    installFctPackage( packageId: string ): void {
-        this.quickShareService.getQuickShareFct( packageId ).subscribe( data => {
-            if ( data.length > 0 ) {
-                const quickShare = data[ 0 ];
+            } else if ( result.share ) {
+                const quickShare = result.share;
                 // Copy all overlays.
                 this.ipcService.installOverlays( quickShare.model.overlays, quickShare.model.primaryDisplaySize ).subscribe( overlays => {
 

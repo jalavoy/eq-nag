@@ -3,8 +3,7 @@ import { DialogService } from 'src/app/dialogs/dialog.service';
 import { IpcService } from 'src/app/ipc.service';
 import { MatTable } from '@angular/material/table';
 import { customAlphabet } from 'nanoid';
-import { ActionTypes, AuthorModel, CapturePhrase, DeathRecapPreferences, LogMaintenanceRules, LogMaintenancePlanTypes, OverlayWindowModel, QuickShareAuthorListTypes, TriggerAction, TriggerModel, ScheduledTask, Range, SettingsKeys, SharedTriggerPermissions, DpsMeterSettings } from 'src/app/core.model';
-import { SettingsService } from '../settings-http.service';
+import { ActionTypes, CapturePhrase, DeathRecapPreferences, LogMaintenanceRules, LogMaintenancePlanTypes, OverlayWindowModel, TriggerAction, TriggerModel, ScheduledTask, Range, SettingsKeys, SharedTriggerPermissions, DpsMeterSettings } from 'src/app/core.model';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { SetupService } from 'src/app/setup/setup.service';
 const alphabet = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
@@ -37,19 +36,13 @@ export class SettingsComponent implements OnInit {
     public voiceOptions: SpeechSynthesisVoice[] = [];
     public voiceIndex: number = null;
     public loadingGinaConfig: boolean = false;
-    public author: AuthorModel = new AuthorModel();
-    public trustedAuthor: boolean = false;
     public detrimentalOverlayId: string = null;
     public beneficialOverlayId: string = null;
     public alertOverlayId: string = null;
-    public enableQuickShareImports: boolean = false;
     public sharedTriggerPermissions: SharedTriggerPermissions = new SharedTriggerPermissions();
     public deathRecapPreferences: DeathRecapPreferences = new DeathRecapPreferences();
     public minimizeToTrayOnLoad: boolean = false;
     public glowOnStartup: boolean = true;
-    public quickShareAuthorListTypes: typeof QuickShareAuthorListTypes = QuickShareAuthorListTypes;
-    public quickShareAuthorListType: QuickShareAuthorListTypes;
-    public quickShareAuthorList: string = '';
     public settingsKeys: typeof SettingsKeys = SettingsKeys;
     public logMaintenancePlanTypes: typeof LogMaintenancePlanTypes = LogMaintenancePlanTypes; 
     public logMaintenanceRules: LogMaintenanceRules = new LogMaintenanceRules();
@@ -79,7 +72,6 @@ export class SettingsComponent implements OnInit {
     constructor(
         private readonly ipcService: IpcService,
         private readonly dialogService: DialogService,
-        private readonly settingsService: SettingsService,
         private readonly snackBar: MatSnackBar,
         private readonly setupService: SetupService,
     ) {
@@ -152,26 +144,14 @@ export class SettingsComponent implements OnInit {
                 }
             }
         } );
-        
-        this.ipcService.getAuthor().subscribe( author => {
-            if ( author != null ) {
-                this.author = author;
-                this.settingsService.isTrusted( author.authorId ).subscribe( trusted => this.trustedAuthor = trusted );
-            }
-        } );
 
         this.ipcService.getOverlayWindows().subscribe( overlays => this.overlays = overlays );
         this.ipcService.getDetrimentalOverlayId().subscribe( id => this.detrimentalOverlayId = id );
         this.ipcService.getBeneficialOverlayId().subscribe( id => this.beneficialOverlayId = id );
         this.ipcService.getAlertOverlayId().subscribe( id => this.alertOverlayId = id );
-        this.ipcService.getEnableQuickShareImports().subscribe( enabled => this.enableQuickShareImports = enabled );
         this.ipcService.getMinimizeToTrayOnLoad().subscribe( enabled => this.minimizeToTrayOnLoad = enabled );
         this.ipcService.getDeathRecapPreferences().subscribe( recapPrefs => this.deathRecapPreferences = recapPrefs ?? new DeathRecapPreferences() );
         this.ipcService.getEnableGlowOnStartup().subscribe( f => this.glowOnStartup = f );
-        this.ipcService.getQuickShareAuthorsListType().subscribe( f => this.quickShareAuthorListType = f );
-        this.ipcService.getQuickShareAuthorsList().subscribe( f => {
-            this.quickShareAuthorList = f == null ? '' : f.join( '\r\n' );
-        } );
 
         this.ipcService.getSetting<boolean>( SettingsKeys.allowPrerelease ).subscribe( f => this.allowPrerelease = f );
         this.ipcService.getSetting<boolean>( SettingsKeys.enableCheckWindowPosition ).subscribe( f => this.enableCheckWindowPosition = f );
@@ -245,38 +225,6 @@ export class SettingsComponent implements OnInit {
         this.updatedSettings.push( key );
     }
 
-
-
-
-
-
-
-
-
-    
-    /**
-     * Saves changes to the user preference.
-     */
-    onQuickShareImportsChange(): void {
-        if ( this.quickShareAuthorList ) {
-            let list = this.quickShareAuthorList.split( /\r\n|\n|\r/g ).filter( f => f != '' );
-            this.ipcService.updateQuickShareAuthorsList( list );
-        } else {
-            this.ipcService.updateQuickShareAuthorsList( [] );
-        }
-        this.ipcService.updateEnableQuickShareImports( this.enableQuickShareImports );
-        this.ipcService.updateQuickShareAuthorsListType( this.quickShareAuthorListType ?? QuickShareAuthorListTypes.Disabled );
-    }
-
-
-
-
-
-
-
-
-
-    
     /**
      * Saves changes to the user preference.
      */
@@ -700,91 +648,6 @@ export class SettingsComponent implements OnInit {
 
         return transforms;
     }
-
-
-
-
-
-
-
-
-
-    
-    /**
-     * Opens a dialog to show their current verified user status.
-     */
-    showVerifiedUserInfo() {
-        this.dialogService.showCustomNotificationDialog( 'Verified Users', [ 'Your author account has been verified.', 'Verified authors are able to publish their triggers to the universal library.' ], 'verified_user' );
-    }
-    
-
-
-
-
-
-
-
-
-    
-    /**
-     * Creates a new author record on the server.
-     */
-    createAuthor() {
-        this.settingsService.createAuthor( this.author.name, this.author.discord ).subscribe( author => {
-            this.ipcService.saveAuthor( author );
-            this.author = author;
-        } );
-    }
-
-
-
-
-
-
-
-
-
-    
-    /**
-     * For verified authors, allows the user to update their author details.
-     */
-    updateAuthor() {
-        this.settingsService.updateAuthor( this.author ).subscribe( success => {
-            if ( success ) {
-                this.snackBar.open( 'Author file updated!', 'dismiss', { duration: 5000 } );
-                this.ipcService.saveAuthor( this.author );
-            }
-        } );
-    }
-
-
-
-
-
-
-
-
-
-    
-    /**
-     * Submits a request for permissions to author and share package libraries.
-     */
-    requestVerification() {
-        this.settingsService.requestVerification( this.author.authorId ).subscribe( success => {
-            if ( success ) {
-                this.snackBar.open( 'Request submitted!', 'dismiss', { duration: 5000 } );
-            }
-        } );
-    }
-
-
-
-
-
-
-
-
-
 
     /**
      * Executes the setup wizard.

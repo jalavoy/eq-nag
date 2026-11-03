@@ -3,7 +3,7 @@ import * as Electron from 'electron';
 import { UpdateInfo } from 'electron-updater';
 import { Observable, Observer, Subject } from 'rxjs';
 import { map, catchError } from 'rxjs/operators';
-import { DataTickModel, DkpEntryModel, TriggerModel, OverlayWindowModel, ActionTypes, FocusEffectSettings, CharacterModel, BasicError, TriggerFolder, FileModel, Tag, AuthorModel, PackageFileModel, TriggerPackageMetaModel, TriggerPackageVersion, FctStylesModel, OverlayBoundsChangedEventArgs, DialogEventArgs, QuickShareMetaModel, LogFileLocation, IpcMessage, DeathRecapPreferences, QuickShareAuthorListTypes, Progress, QuitFailureData, DuplicateTriggerAction, ScrapedSpell, ScrapedClickEffect, TriggerParseHistoryModel, SimulationProgress, FctCombatGroup, CombatTypes, StylePropertiesModel, CombatAnimations, TriggersProfileModel, ConsoleMessageModel, LogTypes, ServerCombatModel, ProgressModel, ServerConsoleMessage, ChatRoomLinkReceivedEventArgs, RenderTokenModel, TokenChangeModel } from './core.model';
+import { DataTickModel, DkpEntryModel, TriggerModel, OverlayWindowModel, ActionTypes, FocusEffectSettings, CharacterModel, BasicError, TriggerFolder, FileModel, Tag, PackageFileModel, FctStylesModel, OverlayBoundsChangedEventArgs, DialogEventArgs, QuickShareMetaModel, ShareFileExportResult, ShareFileImportResult, ShareFileType, LogFileLocation, IpcMessage, DeathRecapPreferences, Progress, QuitFailureData, DuplicateTriggerAction, ScrapedSpell, ScrapedClickEffect, TriggerParseHistoryModel, SimulationProgress, FctCombatGroup, CombatTypes, StylePropertiesModel, CombatAnimations, TriggersProfileModel, ConsoleMessageModel, LogTypes, ServerCombatModel, ProgressModel, RenderTokenModel, TokenChangeModel } from './core.model';
 import { GinaConfiguration, GinaTriggerGroups } from './gina.model';
 import { ColorUtility } from './utilities';
 import { nagId } from './core/nag-id.util';
@@ -18,29 +18,6 @@ export class ConsoleData {
 
 }
 
-export class HandshakePayloadModel {
-
-    public version: string;
-    public peerId: string;
-    public characterName: string;
-    public serverName: string;
-
-}
-
-export class GoodbyePayloadModel {
-
-    public version: string;
-    public peerId: string;
-
-}
-
-export class ServerEventModel {
-
-    public type: 'handshake' | 'disconnect' | 'character';
-    public payload: undefined | HandshakePayloadModel | GoodbyePayloadModel;
-
-}
-
 @Injectable( { providedIn: 'root' })
 export class IpcService {
 
@@ -48,7 +25,6 @@ export class IpcService {
     private _failedParses: TriggerParseHistoryModel[] = [];
     private _consoleMessages: ConsoleMessageModel[] = [];
     private _consoleProgress: ProgressModel[] = [];
-    private _serverLogData: ServerConsoleMessage[] = [];
     
     private _tickObservers: Observer<DataTickModel>[] = [];
     private _transmitObservers: Observer<DkpEntryModel[]>[] = [];
@@ -62,8 +38,6 @@ export class IpcService {
     private _overlayBoundsChangedObservers: Observer<OverlayBoundsChangedEventArgs>[] = [];
     private _warningDialogObservers: Observer<DialogEventArgs>[] = [];
     private _warningResolvedObservers: Observer<DialogEventArgs>[] = [];
-    private _onReceivedQuickShare: Observer<string>[] = [];
-    private _onReceivedQuickSharePackage: Observer<string>[] = [];
     private _onOrphanedTriggerWarning: Observer<boolean>[] = [];
     private _onMissingPackageOverlay: Observer<OverlayWindowModel>[] = [];
     private _onQuitFalure: Observer<QuitFailureData>[] = [];
@@ -78,12 +52,7 @@ export class IpcService {
     private _settingsCacheObservers: Record<string, Observer<any>[]> = {};
     private _watchedSettings: string[] = [];
     private _settingsWatchObservers: Record<string, Observer<any>[]> = {};
-    private _onChatRoomDisconnected: Observer<string>[] = [];
-    private _onChatRoomConnected: Observer<string>[] = [];
-    private _onChatRoomServerLog: Observer<ServerConsoleMessage>[] = [];
-    private _onServerEvent: Observer<ServerEventModel>[] = [];
     private _onCombatCharacterChanged: Observer<string>[] = [];
-    private _onReceivedChatRoomLink: Observer<ChatRoomLinkReceivedEventArgs>[] = [];
     private _tokenChangeObservers: Record<string, Observer<TokenChangeModel>[]> = {};
 
     public onCombatGroupsInitialized: Subject<void> = new Subject<void>();
@@ -123,57 +92,9 @@ export class IpcService {
                     } );
                 } );
 
-                window.api.ipc.on( 'chat-room:disconnected', ( event: any, data: string ) => {
-                    ngZone.run( () => {
-                        this._onChatRoomDisconnected?.forEach( f => {
-                            f.next( data );
-                        } );
-                    } );
-                } );
-
-                window.api.ipc.on( 'chat-room:connected', ( event: any, data: string ) => {
-                    ngZone.run( () => {
-                        this._onChatRoomConnected?.forEach( f => {
-                            f.next( data );
-                        } );
-                    } );
-                } );
-
-                window.api.ipc.on( 'chat-room:server-log', ( event: any, data: { message: string, color: string } ) => {
-                    ngZone.run( () => {
-                        this._onChatRoomServerLog?.forEach( f => {
-                            let m = new ServerConsoleMessage();
-                            m.message = data.message;
-                            m.timestamp = new Date();
-                            
-                            if ( data.color ) {
-                                m.cssClass = `color-${data.color}`;
-                            }
-
-                            f.next( m );
-                        } );
-                    } );
-                } );
-
-                window.api.ipc.on( 'chat-room:server-event', ( event: any, data: ServerEventModel ) => {
-                    ngZone.run( () => {
-                        this._onServerEvent?.forEach( f => {
-                            f.next( data );
-                        } );
-                    } );
-                } );
-
                 window.api.ipc.on( 'combat:character:changed', ( event: any, data: string ) => {
                     ngZone.run( () => {
                         this._onCombatCharacterChanged?.forEach( f => {
-                            f.next( data );
-                        } );
-                    } );
-                } );
-
-                window.api.ipc.on( 'chat-room:link-received', ( event: any, data: ChatRoomLinkReceivedEventArgs ) => {
-                    ngZone.run( () => {
-                        this._onReceivedChatRoomLink?.forEach( f => {
                             f.next( data );
                         } );
                     } );
@@ -196,22 +117,6 @@ export class IpcService {
                     ngZone.run( () => {
                         this._onOrphanedTriggerWarning?.forEach( f => {
                             f.next( data );
-                        } );
-                    } );
-                } );
-
-                window.api.ipc.on( 'quickshare_captured', ( event: any, quickShareId: string ) => {
-                    ngZone.run( () => {
-                        this._onReceivedQuickShare?.forEach( f => {
-                            f.next( quickShareId );
-                        } );
-                    } );
-                } );
-
-                window.api.ipc.on( 'quicksharePackage_captured', ( event: any, packageId: string ) => {
-                    ngZone.run( () => {
-                        this._onReceivedQuickSharePackage?.forEach( f => {
-                            f.next( packageId );
                         } );
                     } );
                 } );
@@ -400,7 +305,6 @@ export class IpcService {
                     this._failedParses.push( ...history.exceptions );
                 } );
 
-                this.onChatRoomServerLog().subscribe( log => this._serverLogData.push( log ) );
 
             } catch ( e ) {
                 throw e;
@@ -480,49 +384,9 @@ export class IpcService {
         return obs;
     }
 
-    public onChatRoomDisconnected(): Observable<string> {
-        let obs: Observable<string> = new Observable<string>( ( observer: Observer<string> ) => {
-            this._onChatRoomDisconnected.push( observer );
-        } );
-
-        return obs;
-    }
-
-    public onChatRoomConnected(): Observable<string> {
-        let obs: Observable<string> = new Observable<string>( ( observer: Observer<string> ) => {
-            this._onChatRoomConnected.push( observer );
-        } );
-
-        return obs;
-    }
-
-    public onChatRoomServerLog(): Observable<ServerConsoleMessage> {
-        let obs: Observable<ServerConsoleMessage> = new Observable<ServerConsoleMessage>( ( observer: Observer<ServerConsoleMessage> ) => {
-            this._onChatRoomServerLog.push( observer );
-        } );
-
-        return obs;
-    }
-
-    public onServerEvent(): Observable<ServerEventModel> {
-        let obs: Observable<ServerEventModel> = new Observable<ServerEventModel>( ( observer: Observer<ServerEventModel> ) => {
-            this._onServerEvent.push( observer );
-        } );
-
-        return obs;
-    }
-
     public onCombatCharacterChanged(): Observable<string> {
         let obs: Observable<string> = new Observable<string>( ( observer: Observer<string> ) => {
             this._onCombatCharacterChanged.push( observer );
-        } );
-
-        return obs;
-    }
-
-    public onReceivedChatRoomLink(): Observable<ChatRoomLinkReceivedEventArgs> {
-        let obs: Observable<ChatRoomLinkReceivedEventArgs> = new Observable<ChatRoomLinkReceivedEventArgs>( ( observer: Observer<ChatRoomLinkReceivedEventArgs> ) => {
-            this._onReceivedChatRoomLink.push( observer );
         } );
 
         return obs;
@@ -543,22 +407,6 @@ export class IpcService {
     public orphanedTriggersFound(): Observable<boolean> {
         let obs: Observable<boolean> = new Observable<boolean>( ( observer: Observer<boolean> ) => {
             this._onOrphanedTriggerWarning.push( observer );
-        } );
-
-        return obs;
-    }
-
-    public quickShareCaptured(): Observable<string> {
-        let obs: Observable<string> = new Observable<string>( ( observer: Observer<string> ) => {
-            this._onReceivedQuickShare.push( observer );
-        } );
-
-        return obs;
-    }
-
-    public quickSharePackageCaptured(): Observable<string> {
-        let obs: Observable<string> = new Observable<string>( ( observer: Observer<string> ) => {
-            this._onReceivedQuickSharePackage.push( observer );
         } );
 
         return obs;
@@ -823,10 +671,6 @@ export class IpcService {
         window.api.ipc.send( 'combat-database:put-server', db );
     }
 
-    public disconnectChatRoom(): void {
-        window.api.ipc.send( 'chat-room:disconnect' );
-    }
-
     public changeCombatCharacter( characterId: string ): void {
         window.api.ipc.send( 'combat:character:change', characterId );
     }
@@ -1034,14 +878,6 @@ export class IpcService {
         window.api.ipc.send( 'main:angular-ready' );
     }
 
-    public createChatRoom(): void {
-        window.api.ipc.send( 'chat-room:start-chat-room' );
-    }
-
-    public joinChatRoom( link: string ): void {
-        window.api.ipc.send( 'chat-room:join-chat-room', link );
-    }
-
     public showSettingsWindow( name: 'combatStatistics' ): void {
         window.api.ipc.send( 'show-settings', name );
     }
@@ -1079,22 +915,6 @@ export class IpcService {
                 } );
             } );
             window.api.ipc.send( 'gina:dialog:import', null );
-
-        } );
-
-        return obs;
-    }
-
-    public showTriggerLibrary(): Observable<boolean> {
-        let obs: Observable<boolean> = new Observable<boolean>( ( observer: Observer<boolean> ) => {
-            
-            window.api.ipc.once( 'trigger:dialog:library', ( e, loaded ) => {
-                this.ngZone.run( () => {
-                    observer.next( loaded );
-                    observer.complete();
-                } );
-            } );
-            window.api.ipc.send( 'trigger:dialog:library', null );
 
         } );
 
@@ -1905,64 +1725,49 @@ export class IpcService {
         return obs;
     }
 
-    public installTriggerPackage( triggerPackage: TriggerPackageMetaModel ): Observable<boolean> {
-        let obs: Observable<boolean> = new Observable<boolean>( ( observer: Observer<boolean> ) => {
+    /**
+     * Asks the user where to save the given share, and writes the share file.
+     *
+     * @returns Returns the result of the export.
+     *
+     * @param type The type of data being shared.
+     * @param model The data to share.
+     * @param files The sound files used by the data.
+     * @param suggestedName The suggested name of the file, without an extension.
+     */
+    public exportShareFile( type: ShareFileType, model: any, files: PackageFileModel[], suggestedName: string ): Observable<ShareFileExportResult> {
+        let obs: Observable<ShareFileExportResult> = new Observable<ShareFileExportResult>( ( observer: Observer<ShareFileExportResult> ) => {
 
-            window.api.ipc.once( 'pkg:install', ( e, installComplete: boolean ) => {
-                this.ngZone.run( () => {
-                    observer.next( installComplete );
-                    observer.complete();
+            window.api.ipc.invoke<ShareFileExportResult>( 'file:share:export', { type, model, files, suggestedName } )
+                .then( result => {
+                    this.ngZone.run( () => {
+                        observer.next( result );
+                        observer.complete();
+                    } );
                 } );
-            } );
-            window.api.ipc.send( 'pkg:install', triggerPackage );
 
         } );
 
         return obs;
     }
 
-    public uninstallTriggerPackage( packageId: string ): Observable<boolean> {
-        let obs: Observable<boolean> = new Observable<boolean>( ( observer: Observer<boolean> ) => {
+    /**
+     * Asks the user for a share file, then reads and validates it.
+     *
+     * @returns Returns the result of the import.
+     *
+     * @param type The type of data the user is importing.
+     */
+    public importShareFile( type: ShareFileType ): Observable<ShareFileImportResult> {
+        let obs: Observable<ShareFileImportResult> = new Observable<ShareFileImportResult>( ( observer: Observer<ShareFileImportResult> ) => {
 
-            window.api.ipc.once( 'pkg:uninstall', ( e, complete: boolean ) => {
-                this.ngZone.run( () => {
-                    observer.next( complete );
-                    observer.complete();
+            window.api.ipc.invoke<ShareFileImportResult>( 'file:share:import', type )
+                .then( result => {
+                    this.ngZone.run( () => {
+                        observer.next( result );
+                        observer.complete();
+                    } );
                 } );
-            } );
-            window.api.ipc.send( 'pkg:uninstall', packageId );
-
-        } );
-
-        return obs;
-    }
-
-    public isPackageInstalled( packageId: string ): Observable<boolean> {
-        let obs: Observable<boolean> = new Observable<boolean>( ( observer: Observer<boolean> ) => {
-
-            window.api.ipc.once( `pkg:isInstalled:${packageId}`, ( e, installed: boolean ) => {
-                this.ngZone.run( () => {
-                    observer.next( installed );
-                    observer.complete();
-                } );
-            } );
-            window.api.ipc.send( 'pkg:isInstalled', packageId );
-
-        } );
-
-        return obs;
-    }
-
-    public getInstalledPackages(): Observable<TriggerPackageVersion[]> {
-        let obs: Observable<TriggerPackageVersion[]> = new Observable<TriggerPackageVersion[]>( ( observer: Observer<TriggerPackageVersion[]> ) => {
-
-            window.api.ipc.once( 'pkg:get:installed', ( e, installed: TriggerPackageVersion[] ) => {
-                this.ngZone.run( () => {
-                    observer.next( installed );
-                    observer.complete();
-                } );
-            } );
-            window.api.ipc.send( 'pkg:get:installed' );
 
         } );
 
@@ -2049,22 +1854,6 @@ export class IpcService {
 
     public savePhoneticTransforms( transforms: Record<string, string> ): void {
         window.api.ipc.send( 'settings:set:phonetic-transforms', transforms );
-    }
-
-    public getAuthor(): Observable<AuthorModel> {
-        let obs: Observable<AuthorModel> = new Observable<AuthorModel>( ( observer: Observer<AuthorModel> ) => {
-            
-            window.api.ipc.once( 'settings:get:author', ( e, author: AuthorModel ) => {
-                this.ngZone.run( () => {
-                    observer.next( author );
-                    observer.complete();
-                } );
-            } );
-            window.api.ipc.send( 'settings:get:author', null );
-
-        } );
-
-        return obs;
     }
 
     public resetHiddenModalIds(): void {
@@ -2288,10 +2077,6 @@ export class IpcService {
         return obs;
     }
 
-    public saveAuthor( author: AuthorModel ): void {
-        window.api.ipc.send( 'settings:set:author', author );
-    }
-
     public getIgnoredGinaObjects(): Observable<string[]> {
         let obs: Observable<string[]> = new Observable<string[]>( ( observer: Observer<string[]> ) => {
             
@@ -2456,26 +2241,6 @@ export class IpcService {
         } );
     }
 
-    public updateEnableQuickShareImports( enabled: boolean ): void {
-        window.api.ipc.send( 'settings:set:quickShareImports', enabled );
-    }
-
-    public getEnableQuickShareImports(): Observable<boolean> {
-        let obs: Observable<boolean> = new Observable<boolean>( ( observer: Observer<boolean> ) => {
-            
-            window.api.ipc.once( 'settings:get:quickShareImports', ( e, enabled: boolean ) => {
-                this.ngZone.run( () => {
-                    observer.next( enabled );
-                    observer.complete();
-                } );
-            } );
-            window.api.ipc.send( 'settings:get:quickShareImports', null );
-
-        } );
-
-        return obs;
-    }
-
     public updateEnableGlowOnStartup( enabled: boolean ): void {
         window.api.ipc.send( 'settings:set:glowOnStartup', enabled );
     }
@@ -2490,46 +2255,6 @@ export class IpcService {
                 } );
             } );
             window.api.ipc.send( 'settings:get:glowOnStartup', null );
-
-        } );
-
-        return obs;
-    }
-
-    public updateQuickShareAuthorsListType( listType: QuickShareAuthorListTypes ): void {
-        window.api.ipc.send( 'settings:set:quickShareAuthorsListType', listType );
-    }
-
-    public getQuickShareAuthorsListType(): Observable<QuickShareAuthorListTypes> {
-        let obs: Observable<QuickShareAuthorListTypes> = new Observable<QuickShareAuthorListTypes>( ( observer: Observer<QuickShareAuthorListTypes> ) => {
-            
-            window.api.ipc.once( 'settings:get:quickShareAuthorsListType', ( e, enabled: QuickShareAuthorListTypes ) => {
-                this.ngZone.run( () => {
-                    observer.next( enabled );
-                    observer.complete();
-                } );
-            } );
-            window.api.ipc.send( 'settings:get:quickShareAuthorsListType', null );
-
-        } );
-
-        return obs;
-    }
-
-    public updateQuickShareAuthorsList( list: string[] ): void {
-        window.api.ipc.send( 'settings:set:quickShareAuthorsList', list );
-    }
-
-    public getQuickShareAuthorsList(): Observable<string[]> {
-        let obs: Observable<string[]> = new Observable<string[]>( ( observer: Observer<string[]> ) => {
-            
-            window.api.ipc.once( 'settings:get:quickShareAuthorsList', ( e, enabled: string[] ) => {
-                this.ngZone.run( () => {
-                    observer.next( enabled );
-                    observer.complete();
-                } );
-            } );
-            window.api.ipc.send( 'settings:get:quickShareAuthorsList', null );
 
         } );
 
@@ -2645,19 +2370,6 @@ export class IpcService {
             data.consoleProgress = this._consoleProgress.slice();
 
             observer.next( data );
-            observer.complete();
-        } );
-
-        return obs;
-    }
-
-    public clearChatRoomServerLogData(): void {
-        this._serverLogData = [];
-    }
-
-    public getChatRoomServerLogData(): Observable<ServerConsoleMessage[]> {
-        let obs: Observable<ServerConsoleMessage[]> = new Observable<ServerConsoleMessage[]>( ( observer: Observer<ServerConsoleMessage[]> ) => {
-            observer.next( this._serverLogData );
             observer.complete();
         } );
 
@@ -2786,22 +2498,6 @@ export class IpcService {
                 } );
             } );
             window.api.ipc.send( 'combat-database:get-all', undefined );
-
-        } );
-
-        return obs;
-    }
-
-    public getServerList(): Observable<string[]> {
-        let obs: Observable<string[]> = new Observable<string[]>( ( observer: Observer<string[]> ) => {
-                
-            window.api.ipc.once( 'combat-database:get-server-names', ( e, data: string[] ) => {
-                this.ngZone.run( () => {
-                    observer.next( data );
-                    observer.complete();
-                } );
-            } );
-            window.api.ipc.send( 'combat-database:get-server-names', undefined );
 
         } );
 

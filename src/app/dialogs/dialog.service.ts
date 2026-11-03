@@ -32,7 +32,6 @@ import * as _ from 'lodash-es';
 import { MonitorSelectDialogComponent } from './monitor-select-dialog/monitor-select-dialog.component';
 import { QuestionDialogAnswerModel, QuestionDialogModel } from './question-dialog/question-dialog.model';
 import { QuestionDialogComponent } from './question-dialog/question-dialog.component';
-import { JoinChatRoomDialogComponent, JoinChatRoomDialogResult } from './join-chat-room-dialog/join-chat-room-dialog.component';
 import { ITriggerHotkeyDialogData, TriggerHotkeyDialogComponent } from './trigger-hotkey-dialog/trigger-hotkey-dialog.component';
 
 @Injectable()
@@ -921,9 +920,7 @@ export class DialogService {
 
     
     /**
-     * Shows the prepare quickshare dialog to the user.
-     * 
-     * @returns Returns the quick share id, in share format.  ie: {NAG:asdff1234QWER7654}
+     * Shows the dialog that exports the given triggers to a share file.
      * 
      * @param triggers The triggers to share.
      * @param folders The trigger folders to include in the share.
@@ -959,7 +956,8 @@ export class DialogService {
      * 
      * @returns Returns true if the user has imported any folders/triggers.
      * 
-     * @param quickShareId The quick share id, in share format.
+     * @param quickShares The quick shares to import.
+     * @param files The sound files used by the quick shares.
      */
     public showReceiveQuickShareDialog(quickShares: QuickShareMetaModel[], files: QuickShareFileModel[]): Observable<boolean> {
 
@@ -1189,29 +1187,4 @@ export class DialogService {
         return af;
     }
 
-
-
-
-
-
-
-
-
-
-    /**
-     * Shows the join chatroom dialog.
-     * 
-     * @returns Returns the join chat room dialog result.
-     * 
-     * @param server The server the player is on.
-     * @param player The player's name.
-     */
-    public showJoinChatRoomDialog( server: string, player: string ): Observable<JoinChatRoomDialogResult> {
-        return this.dialog.open<JoinChatRoomDialogComponent, any, JoinChatRoomDialogResult>( JoinChatRoomDialogComponent, {
-            // width: '450px',
-            data: { server: server, player: player },
-            panelClass: 'app-dialog',
-        } ).afterClosed();
-    }
-    
 }

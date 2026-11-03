@@ -26,8 +26,6 @@ class WindowManager {
     /** @type {BrowserWindow} */
     ginaImportWindow;
 
-    /** @type {BrowserWindow} */
-    triggerLibraryWindow;
 
     /** @type {BrowserWindow} */
     logSimulatorWindow;
@@ -616,44 +614,6 @@ class WindowManager {
                 this.ginaImportWindow.webContents.openDevTools( { mode: 'undocked' } );
             }
             
-        } );
-
-        ipcMain.on( 'trigger:dialog:library', ( event, arg ) => {
-            this.triggerLibraryWindow = new BrowserWindow( {
-                parent: mainWindowRef.reference,
-                modal: false,
-                show: false,
-                width: 1000,
-                height: 800,
-                frame: false,
-                webPreferences: {
-                    nodeIntegration: false,
-                    contextIsolation: true,
-                    devTools: app.isDev(),
-                    sandbox: false,
-                    preload: path.join( __dirname, '/preloaders/main.js' ),
-                }
-            } );
-
-            require( "@electron/remote/main" ).enable( this.triggerLibraryWindow.webContents );
-
-            if ( app.isDev() ) {
-                this.triggerLibraryWindow.webContents.openDevTools( { mode: 'undocked' } );
-            }
-            let url = `file://${this.#dirname}/dist/index.html#/trigger/library`;
-            if ( arg ) {
-                url += `/${arg}`;
-            }
-            this.triggerLibraryWindow.loadURL( url );
-            this.triggerLibraryWindow.once( "ready-to-show", () => {
-                this.triggerLibraryWindow.show();
-                event.sender.send( 'trigger:dialog:library', true );
-            } );
-            this.triggerLibraryWindow.on( 'closed', () => {
-                this.triggerLibraryWindow = null;
-            } );
-            this.triggerLibraryWindow.setBackgroundColor( '#1a1a1a' );
-            this.configureRendererMouseBlockingOnMoveResize( this.triggerLibraryWindow );
         } );
 
         ipcMain.on( 'trigger:dialog:log-simulator', ( event, arg ) => {
@@ -1359,9 +1319,6 @@ class WindowManager {
             fn( this.ginaImportWindow, 'ginaImportWindow' );
         }
 
-        if ( this.triggerLibraryWindow ) {
-            fn( this.triggerLibraryWindow, 'triggerLibraryWindow' );
-        }
 
         if ( this.logSimulatorWindow ) {
             fn( this.logSimulatorWindow, 'logSimulatorWindow' );

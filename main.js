@@ -41,6 +41,7 @@ import LogBootstrapper from "./src/electron/log-bootstrap.js";
 import GameResources from "./src/electron/data/game-resources.js";
 import FilesDatabaseStore from "./src/electron/data/files-database.js";
 import GinaImporter from "./src/electron/gina-importer.js";
+import { registerShareFileHandlers } from "./src/electron/share-files.js";
 
 import {
   IpcMessage,
@@ -75,6 +76,7 @@ var mainWindow, logWatcherWindow, testWindow;
 var enableDevMode = false;
 const updateCheckInterval = 10 * 60 * 1000;
 migrateUserDataFolder();
+registerShareFileHandlers();
 const winManager = new WindowManager(__dirname);
 const userPreferences = new UserPreferencesStore( {} );
 const dkpDatabase = new DkpDatabaseStore();
@@ -98,10 +100,6 @@ const allowMultipleInstances = false;
 const fs = await import( 'fs' );
 var doUpdateCheck = true;
 
-
-const configRootPath = path.join( __dirname, 'config.json' );
-
-const config = JSON.parse( fs.readFileSync( configRootPath, 'utf-8' ) );
 
 import remoteMain from '@electron/remote/main/index.js';
 remoteMain.initialize();
@@ -637,28 +635,6 @@ ipcMain.on( 'combat:record-encounters',
         logBootstrap.sendToCombatWatcher( 'combat:record-encounters', data );
     } );
 
-ipcMain.on( 'chat-room:link-received',
-    /**
-     * @param {Electron.IpcMainEvent} event The event args.
-     * @param {{link: string, player: string, server: string}} data The chat link received args.
-     */
-    ( event, data ) => {
-        
-        if ( userPreferences.serverTrustedPlayers[ data.server ] && userPreferences.serverTrustedPlayers[ data.server ].includes( data.player ) ) {
-            // join server.
-            logBootstrap.sendToCombatWatcher( 'chat-room:join-chat-room', data.link );
-
-        } else if ( userPreferences.serverBlockedPlayers[ data.server ] && userPreferences.serverBlockedPlayers[ data.server ].includes( data.player ) ) {
-            // ignore
-            appLogException( { label: 'Chat Room', message: `Blocked player ${data.player} from server ${data.server}.`, payload: data } );
-
-        } else {
-            mainWindow.webContents.send( 'chat-room:link-received', data );
-            mainWindow.flashFrame( true );
-        }
-
-    } );
-
 ipcMain.on( 'main:console:log', ( event, data ) => { mainWindow.webContents.send( 'console:log', data ); } );
 
 let _tickTimeoutId = -1;
@@ -701,10 +677,7 @@ function sendTick( delay ) {
         folders: _folders,
         fctStyles: userPreferences.fctStyles,
         persistentStorage: userPreferences.persistentStorage,
-        enableQuickShareImports: userPreferences.enableQuickShareImports,
         detrimentalOverlayId: userPreferences.detrimentalOverlayId,
-        quickShareAuthorsListType: userPreferences.quickShareAuthorsListType,
-        quickShareAuthorsList: userPreferences.quickShareAuthorsList,
         characterDisabledTriggers: characterDatabase.getAll().map( c => { return { characterId: c.characterId, disabledTriggers: c.disabledTriggers }; } ),
         triggerProfileDisabledTriggers: characterDatabase.getAllTriggerProfiles().map( tp => { return { triggerProfileId: tp.triggerProfileId, disabledTriggers: tp.disabledTriggers }; } ),
     };
@@ -789,14 +762,6 @@ ipcMain.on( 'clipboard:writeText', ( event, value ) => {
     clipboard.writeText( value );
 } );
 
-ipcMain.on( 'quickshare_captured', ( event, quickShareId ) => {
-    mainWindow.webContents.send( 'quickshare_captured', quickShareId );
-} );
-
-ipcMain.on( 'quicksharePackage_captured', ( event, packageId ) => {
-    mainWindow.webContents.send( 'quicksharePackage_captured', packageId );
-} );
-
 var pseudoClipboard = {};
 ipcMain.on( 'context:store:pseudo-clipboard', ( event, model ) => {
     if ( model && model.key ) {
@@ -875,78 +840,9 @@ ipcMain.on( 'console:command',
                 } else {
                     event.sender.send( 'console:success', { label: 'Text Ping', message: `Ping received: ${commands.slice( 1 ).join( ' ' )}`, timestamp: new Date() } );
                 }
-            } else if ( commands[ 0 ] === 'chat' ) {
-                if ( commands[ 1 ] === 'create' ) {
-                    logBootstrap.sendToCombatWatcher( 'chat-room:start-chat-room', null );
-                } else if ( commands[ 1 ] === 'join' ) {
-                    logBootstrap.sendToCombatWatcher( 'chat-room:join-chat-room', commands[ 2 ] );
-                } else if ( commands[ 1 ] === 'leave' ) {
-                    logBootstrap.sendToCombatWatcher( 'chat-room:disconnect', null );
-                }
             }
         }
     } );
-
-ipcMain.on( 'chat-room:server-event',
-    /**
-     * Forwards server events to the main window.
-     * 
-     * @param {Electron.IpcMainEvent} event The event args.
-     * @param {{type: 'handshake' | 'disconnect', payload: any}} data The message data.
-     */
-    ( event, data ) => mainWindow.webContents.send( 'chat-room:server-event', data ) );
-
-ipcMain.on( 'chat-room:server-log',
-    /**
-     * Forwards the chat room log event to the main window.
-     * 
-     * @param {Electron.IpcMainEvent} event The event args.
-     * @param {string} data The chat room id.
-     */
-    ( event, data ) => mainWindow?.webContents.send( 'chat-room:server-log', data ) );
-
-ipcMain.on( 'chat-room:start-chat-room',
-    /**
-     * Sends the create chat room event to the combat watcher.
-     * 
-     * @param {Electron.IpcMainEvent} event The event args.
-     */
-    ( event ) => logBootstrap.sendToCombatWatcher( 'chat-room:start-chat-room', null ) );
-
-ipcMain.on( 'chat-room:join-chat-room',
-    /**
-     * Sends the create chat room event to the combat watcher.
-     * 
-     * @param {Electron.IpcMainEvent} event The event args.
-     * @param {string} data The chat room link.
-     */
-    ( event, data ) => logBootstrap.sendToCombatWatcher( 'chat-room:join-chat-room', data ) );
-
-ipcMain.on( 'chat-room:connected',
-    /**
-     * Forwards the chat room connected event to the main window.
-     * 
-     * @param {Electron.IpcMainEvent} event The event args.
-     * @param {string} data The chat room id.
-     */
-    ( event, data ) => mainWindow.webContents.send( 'chat-room:connected', data ) );
-
-ipcMain.on( 'chat-room:disconnect',
-    /**
-     * Disconnects from the chat room.
-     * 
-     * @param {Electron.IpcMainEvent} event The event args.
-     */
-    ( event ) => logBootstrap.sendToCombatWatcher( 'chat-room:disconnect', null ) );
-
-ipcMain.on( 'chat-room:disconnected',
-    /**
-     * Sends the chat room disconnected event to the main window.
-     * 
-     * @param {Electron.IpcMainEvent} event The event args.
-     * @param {string} reason The reason for the disconnect.
-     */
-    ( event, reason ) => mainWindow?.webContents.send( 'chat-room:disconnected', reason ) );
 
 /**
 * Sends the console message to the debug console.
@@ -983,11 +879,6 @@ ipcMain.on( 'cache:store',
     ( event, data ) => {
         memoryCache[ data.key ] = data.value;
     } );
-
-ipcMain.handle( 'get:nag-service-url', ( event, data ) => {
-    let nagServiceUri = config.apiEndPoint;
-    return nagServiceUri;
-} );
 
 ipcMain.on( 'cache:retrieve',
     /**

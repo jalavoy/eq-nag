@@ -10,10 +10,6 @@ import { GinaImportWindowComponent } from './gina-import-window/gina-import-wind
 import { DialogModule } from '../dialogs/dialog.module';
 import { EditorsModule } from '../editors/editors.module';
 import { GinaImportStepperComponent } from './gina-import-window/gina-import-stepper.component';
-import { TriggerLibraryWindowComponent } from './trigger-library-window/trigger-library-window.component';
-import { TriggerLibraryService } from './trigger-library.service';
-import { NewTriggerPackageComponent } from './new-trigger-package/new-trigger-package.component';
-import { TriggerPackageDetailsComponent } from './trigger-package-details/trigger-package-details.component';
 import { WebComponentsModule } from '../web-components/web-components.module';
 import { HttpClientModule } from '@angular/common/http';
 import { MarkdownModule } from 'ngx-markdown';
@@ -45,22 +41,15 @@ import { SettingsWindowComponent } from './settings-window/settings-window.compo
     exports: [
         GinaImportStepperComponent,
         GinaImportWindowComponent,
-        TriggerLibraryWindowComponent,
     ],
     declarations: [
         GinaImportStepperComponent,
         TriggerReviewsComponent,
         GinaImportWindowComponent,
-        TriggerLibraryWindowComponent,
-        NewTriggerPackageComponent,
-        TriggerPackageDetailsComponent,
         UpdateNotesWindowComponent,
         LogSimulatorComponent,
         EasyWindowComponent,
         SettingsWindowComponent,
-    ],
-    providers: [
-        TriggerLibraryService
     ],
 })
 export class WindowsModule { }

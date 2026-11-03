@@ -28,14 +28,12 @@ import { MoveOverlaysDialogComponent } from './move-overlays-dialog/move-overlay
 import { ColoredStringPipe } from '../pipes/colored-string.pipe';
 import { PrepareQuickShareDialogComponent } from './quick-share/prepare-quick-share.component';
 import { ReceiveQuickShareDialogComponent } from './quick-share/receive-quick-share.component';
-import { AuthorDialogComponent } from './author-dialog/author-dialog.component';
 import { DeathRecapDialogComponent } from './death-recap-dialog/death-recap-dialog.component';
 import { MapPackageOverlayDialogComponent } from './map-package-overlay-dialog/map-package-overlay-dialog.component';
 import { WebComponentsModule } from '../web-components/web-components.module';
 import { ActionOverlayReassignmentDialogComponent } from './action-overlay-reassignment-dialog/action-overlay-reassignment-dialog.component';
 import { MonitorSelectDialogComponent } from './monitor-select-dialog/monitor-select-dialog.component';
 import { QuestionDialogComponent } from './question-dialog/question-dialog.component';
-import { JoinChatRoomDialogComponent } from './join-chat-room-dialog/join-chat-room-dialog.component';
 import { TriggerHotkeyDialogComponent } from './trigger-hotkey-dialog/trigger-hotkey-dialog.component';
 
 @NgModule( {
@@ -72,7 +70,6 @@ import { TriggerHotkeyDialogComponent } from './trigger-hotkey-dialog/trigger-ho
         MoveOverlaysDialogComponent,
         PrepareQuickShareDialogComponent,
         ReceiveQuickShareDialogComponent,
-        AuthorDialogComponent,
         MapPackageOverlayDialogComponent,
         ActionOverlayReassignmentDialogComponent,
         MonitorSelectDialogComponent,
@@ -100,12 +97,10 @@ import { TriggerHotkeyDialogComponent } from './trigger-hotkey-dialog/trigger-ho
         MoveOverlaysDialogComponent,
         PrepareQuickShareDialogComponent,
         ReceiveQuickShareDialogComponent,
-        AuthorDialogComponent,
         DeathRecapDialogComponent,
         MapPackageOverlayDialogComponent,
         ActionOverlayReassignmentDialogComponent,
         MonitorSelectDialogComponent,
-        JoinChatRoomDialogComponent,
         TriggerHotkeyDialogComponent,
     ],
     providers: [

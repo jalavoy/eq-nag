@@ -2,7 +2,7 @@
 const { ipcRenderer } = require( 'electron' );
 const fs = require( 'fs' );
 const { Trigger, TriggerAction, ActionTypes, TriggerConditionTypes, OperatorTypes, CharacterClassLevel, TriggerSubAction, TriggerFolder, TriggerCondition, CapturePhrase, Phrase, TriggerParseHistoryModel, getActionLabel, LogTypes, ErrorMessages } = require( '../data/models/trigger' );
-const { QuickShareAuthorListTypes, SimulationProgress, NConditionalModel, VConditionalOperationModel, SConditionalModel, LConditionalOperationModel, SConditionalOperationModel } = require( '../data/models/common' );
+const { SimulationProgress, NConditionalModel, VConditionalOperationModel, SConditionalModel, LConditionalOperationModel, SConditionalOperationModel } = require( '../data/models/common' );
 const { PhraseParse, LogTrigger, LogList } = require( './log.model' );
 const { OverlayComponent, OverlayWindow, TriggerSecondaryActionModel } = require( '../data/models/overlay-window' );
 const { CharacterModel } = require( '../data/models/character' );
@@ -22,7 +22,6 @@ const perf = require( '../utilities/perf' );
 // the per-trigger timing doesn't slow the log watcher down much.
 let perfTriggerSample = 0;
 const { LogHistoryManager } = require( '../utilities/log-console' );
-const { createChatRoomLink } = require( '../utilities/peer-to-peer' );
 const { nagException, nagLog } = require( '../utilities/nag-console' );
 const { nagId } = require( '../utilities/nag-id' );
 const { RendererComponent, ListObjectModel } = require( '../data/models/renderer' );
@@ -67,7 +66,6 @@ var secondaryTriggerActions = [];
 var dotWornOffTracking = [];
 /** @type {Record<string, string[]>} */
 var usedConditionValues = {};
-var enableQuickShareImports = true;
 var damageDealtOverlayId = null;
 var damageReceivedOverlayId = null;
 var voiceOptions = [];
@@ -103,12 +101,6 @@ let logHistoryMgr = new LogHistoryManager( '', '', () => { }, () => { }, () => [
 
 /** @type {Record<string, {trigger: LogTrigger, res: PhraseParse}>} */
 let actionInstances = {};
-
-/** @type {QuickShareAuthorListTypes} */
-let quickShareAuthorsListType = QuickShareAuthorListTypes.Disabled;
-
-/** @type {string[]} */
-let quickShareAuthorsList = [];
 
 /** @type {HTMLAudioElement[]} */
 let audioPlayers = [];
@@ -663,10 +655,7 @@ function LogWatcher(character, logPosition) {
         phoneticTransforms = data.phoneticTransforms;
         charModel = data.characterModel ? data.characterModel : charModel;
         overlays = data.overlays;
-        enableQuickShareImports = data.enableQuickShareImports;
         detrimentalOverlayId = data.detrimentalOverlayId;
-        quickShareAuthorsListType = data.quickShareAuthorsListType;
-        quickShareAuthorsList = data.quickShareAuthorsList;
 
         if ( data.characterDisabledTriggers ) {
             const characterDisabledTriggers = data.characterDisabledTriggers.find( f => f.characterId === characterId );
@@ -1651,67 +1640,6 @@ function parseLogEntries( raw, simulating, padTime ) {
     
         let log = raw.replace( rgxTimestamp, '' );
         
-        // https://regex101.com/r/FvGiGC/2
-        // {NAG:(?<quickShareId>.+?)}
-        // TODO: Remove the negative lookahead for package after a few versions.
-        // let quickShareRegx = /{NAG:(?!package\/)(quick-share\/)?(?<quickShareId>.+?)}/g;
-    
-        // https://regex101.com/r/ZrNaZM/2
-        let quickShareRegx = /^(:?(?<author>\w+) .*)?{NAG:(?!package\/)(?!p2p\/)(quick-share\/)?(?<quickShareId>.+?)}/g;
-
-        // https://regex101.com/r/L8V7Ip/2
-        let p2pRegex = /^(:?(?<player>\w+) .*)?{NAG:(p2p\/)(?<chatRoomId>.+?)}/g;
-
-        // https://regex101.com/r/RwCLkN/1
-        let packageShareRegx = /{NAG:package\/(?<packageId>.+?)}/g;
-        // {NAG:OVtf9VzRSjykb1xx}
-        // {NAG:quick-share/OVtf9VzRSjykb1xx}
-        // {NAG:package/X0VJh1fjkddZCl9r}
-
-        // https://regex101.com/r/n9aOlR/1
-        // ^(?<author>Name|Name2) .*{NAG:(?<quickShareId>.+?)}
-
-        // Capture quickshares, when enabled.
-        let quickShare = !enableQuickShareImports ? null : quickShareRegx.exec( log );
-        if ( quickShare && quickShare.groups?.quickShareId ) {
-            if ( quickShareAuthorsListType === QuickShareAuthorListTypes.Whitelist && quickShare.groups?.author ) {
-                // Whitelist will only share if the author is known and in the
-                // authors list.  Unknown is in terms of captured by the regular 
-                // expression.
-                if ( quickShareAuthorsList.findIndex( f => f.toLowerCase() === quickShare.groups.author.toLowerCase() ) > -1 ) {
-                    ipcRenderer.send( 'quickshare_captured', quickShare.groups.quickShareId );
-                }
-
-            } else if ( quickShareAuthorsListType === QuickShareAuthorListTypes.Blacklist ) {
-                // Blacklist will only share if the author is either unknown or the
-                // author is known and not in the list.  Unknown is in terms of 
-                // captured by the regular expression.
-                if ( !quickShare.groups?.author || quickShareAuthorsList.findIndex( f => f.toLowerCase() === quickShare.groups.author.toLowerCase() ) === -1 ) {
-                    ipcRenderer.send( 'quickshare_captured', quickShare.groups.quickShareId );
-                }
-
-            } else {
-                ipcRenderer.send( 'quickshare_captured', quickShare.groups.quickShareId );
-
-            }
-
-        }
-
-        let p2p = p2pRegex.exec( log );
-        if ( p2p && p2p.groups?.chatRoomId && p2p.groups?.player != 'You' && p2p.groups?.player != 'you' && p2p.groups?.player != characterName ) {
-            let link = createChatRoomLink( p2p.groups.chatRoomId );
-            ipcRenderer.send( 'chat-room:link-received', {
-                link: link,
-                player: p2p.groups.player,
-                server: charModel.server,
-            } );
-        }
-
-        let quickSharePackage = packageShareRegx.exec( log );
-        if ( quickSharePackage && quickSharePackage.groups?.packageId ) {
-            ipcRenderer.send( 'quicksharePackage_captured', quickSharePackage.groups.packageId );
-        }
-    
         // If there are any cancellable actions, evaluate them here.
         if ( cancellableComponents?.length > 0 ) {
             let tokenIds = [];
