@@ -1,10 +1,11 @@
 """Version numbers and release notes for the Test build, Pre-release and
 Release workflows.
 
-Versions are <series>.<build>, e.g. 0.2.27.  The series (0.2) comes from
-package.json; the build number goes up by one for every pre-release and
-release, and test builds are <next version>-beta.<n>.  Nobody edits versions
-by hand: each workflow asks this script for the next one.
+Versions are <series>.<build>, e.g. 0.3.1.  The series (0.3) comes from
+package.json; the build number starts at 0 and goes up by one for every
+pre-release and release, and test builds are <next version>-beta.<n>.  Only
+a new series is edited by hand: each workflow asks this script for the next
+version.
 
 Commands (run from the repository root, with GH_TOKEN and GITHUB_REPOSITORY):
   version test|pre|release      print the version to build
@@ -65,13 +66,16 @@ def next_version( kind ):
     rels = releases()
     builds = [ build_of( r[ 'tag_name' ], s ) for r in rels ]
     builds += [ build_of( t, s ) for t in run( 'git', 'tag', '--list', f'v{s}.*' ).splitlines() ]
-    next_build = max( [ b for b in builds if b is not None ], default=0 ) + 1
+    next_build = max( [ b for b in builds if b is not None ], default=-1 ) + 1
 
     if kind == 'release':
-        return f'{s}.{pending_draft( rels, s, False ) or next_build}'
+        build = pending_draft( rels, s, False )
+        return f'{s}.{next_build if build is None else build}'
 
     # A pending pre-release draft keeps its number until it's published.
-    build = pending_draft( rels, s, True ) or next_build
+    build = pending_draft( rels, s, True )
+    if build is None:
+        build = next_build
     if kind == 'pre':
         return f'{s}.{build}'
 

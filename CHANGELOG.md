@@ -3,7 +3,7 @@
 Each version's section is written to be pasted into its GitHub release
 description, which Nag shows in the Update Notes window.
 
-## v0.2.27 (unreleased)
+## v0.3.0
 
 ### Fixes
 - **Setup wizard no longer gets stuck.** On a new install, or after Nag's settings files were lost or damaged (for example after a crash), the setup wizard's buttons could stop working, leaving the wizard covering the app. This affected every version since 0.2.23. Nag now correctly upgrades its settings on startup, and anyone already stuck should be fixed automatically after updating. The wizard also moves on if a step fails instead of waiting forever, and **Cancel Setup Wizard** now stops it from opening on every launch (you can still run it from the Settings tab).
