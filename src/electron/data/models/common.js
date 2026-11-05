@@ -99,15 +99,6 @@ class PlayerPet {
     name;
 }
 
-const QuickShareAuthorListTypes = {
-    '0': 'Disabled',
-    '1': 'Whitelist',
-    '2': 'Blacklist',
-    Disabled: 0,
-    Whitelist: 1,
-    Blacklist: 2,
-}
-
 class Progress {
     
     /** @type {number} */
@@ -447,7 +438,6 @@ module.exports = {
     IpcMessage,
     PlayerCharacter,
     PlayerPet,
-    QuickShareAuthorListTypes,
     Progress,
     SimulationProgress,
     Range,

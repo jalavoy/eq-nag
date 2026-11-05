@@ -54,8 +54,8 @@ var triggers = [];
 var triggerFolders = [];
 /** @type {Record<string, string[]>} */
 var storedVariables = {};
-/** @type {string[]} A list of all component instance ids originated by this log watcher. */
-var logInstanceIds = [];
+/** @type {Set<string>} All component instance ids originated by this log watcher. */
+var logInstanceIds = new Set();
 /** @type {Record<string, {value: number, lastUpdate: Date, resetDelay: number, _parse: (logEntry: string) => boolean}>} */
 var counters = {};
 /** @type {{_parse: (logEntry: string) => boolean, instanceId: string}[]} */
@@ -88,6 +88,10 @@ var utterances = [];
 var phoneticTransforms = {};
 /** @type {Record<number, string[]>} */
 var parsedLogEntries = {};
+/** Parse history is only used to look back a spell's cast time, so older entries are removed. */
+const parseHistoryRetentionMs = 15 * 60 * 1000;
+const parseHistoryPruneIntervalMs = 60 * 1000;
+var parseHistoryPrunedAt = 0;
 /** @type {{}} */
 var persistentDictionary = {};
 /** @type {string} */
@@ -230,7 +234,7 @@ function createSimulationTimer( duration ) {
 
     let instanceId = displayTimerCountdownComponent( res, new Date(), action, 0, trigger );
     
-    logInstanceIds.push( instanceId );
+    logInstanceIds.add( instanceId );
 
     return instanceId;
 }
@@ -640,6 +644,8 @@ function LogWatcher(character, logPosition) {
         speakPhrase( data.phrase, data.interruptSpeech, data.speakNext === true, null, false, data.parseResult, data.timerDuration, 0, 100, 1 );
     } );
 
+    ipcRenderer.on( 'log:watchdog:ping', () => ipcRenderer.send( 'log:watchdog:pong' ) );
+
     ipcRenderer.on( 'tick', function ( event, data ) {
         triggers = data.triggers;
         triggerFolders = data.folders;
@@ -744,7 +750,7 @@ function LogWatcher(character, logPosition) {
          * @param {{variableName: string, variableValue: any, instanceId: string}} data The values.
          */
         ( e, data ) => {
-            if ( logInstanceIds.includes( data.instanceId ) ) {
+            if ( logInstanceIds.has( data.instanceId ) ) {
                 saveVariable( data.variableName, data.variableValue, false );
             }
         } );
@@ -756,8 +762,8 @@ function LogWatcher(character, logPosition) {
          * @param {{variableName: string, variableValue: any, instanceId: string}} data The values.
          */
         ( e, data ) => {
-            console.log( 'received store variable', data, logInstanceIds.includes( data.instanceId ) );
-            if ( logInstanceIds.includes( data.instanceId ) ) {
+            console.log( 'received store variable', data, logInstanceIds.has( data.instanceId ) );
+            if ( logInstanceIds.has( data.instanceId ) ) {
                 saveScalarVariable( data.variableName, data.variableValue );
             }
         } );
@@ -1799,6 +1805,11 @@ function parseLogEntries( raw, simulating, padTime ) {
             let t = timestamp.getTime();
             parsedLogEntries[ t ] = parsedLogEntries[ t ]?.length > 0 ? parsedLogEntries[ t ] : [];
             parsedLogEntries[ t ].push( log );
+
+            if ( t - parseHistoryPrunedAt > parseHistoryPruneIntervalMs ) {
+                ArrayUtilities.removeKeysBelow( parsedLogEntries, t - parseHistoryRetentionMs );
+                parseHistoryPrunedAt = t;
+            }
         }
 
         // let endp = performance.now(); //p
@@ -2067,7 +2078,7 @@ function displayListAction( res, action, trigger ) {
         // Ensure the duration is at least numerical.
         list.action.duration = list.action.duration ? list.action.duration : 0;
         
-        logInstanceIds.push( list.component.instanceId );
+        logInstanceIds.add( list.component.instanceId );
 
         let subRes = _.cloneDeep( res );
         subRes.result.groups = _.cloneDeep( res.result.groups );
@@ -2759,7 +2770,7 @@ function displayScreenGlow( action, triggerId ) {
     comp.triggerId = triggerId;
     comp.action = action;
     
-    logInstanceIds.push( comp.instanceId );
+    logInstanceIds.add( comp.instanceId );
     
     ipcRenderer.send( 'overlay:send:component', comp );
 }
@@ -2792,13 +2803,14 @@ function displayBeneficialTimerComponent( res, timestamp, action, trigger, spell
     comp.triggerId = trigger.triggerId;
     comp.triggerName = spellName;
     comp.action = Object.assign( new TriggerAction(), action );
+    comp.action.duration = +action.duration || 0;
     comp.action.displayText = `${spellName} --== ${res.result.groups.target} ==--`;
     comp.overlayId = action.overlayId;
     comp.matches = res.result;
     comp.timestamp = timestamp;
     comp.voiceIndex = voiceIndex;
     
-    logInstanceIds.push( comp.instanceId );
+    logInstanceIds.add( comp.instanceId );
     
     if ( comp.action.endingSoonDisplayText ) {
         comp.action.endingSoonText = StringUtilities.parseShortCodeValuesToLiteral( action.endingSoonText, characterName, comp.action.duration, res.result?.groups, res.result ? res.result[ 0 ] : null );
@@ -2928,13 +2940,14 @@ function displayDotTimerComponent( res, timestamp, action, deltaTime, trigger ) 
     comp.triggerId = trigger.triggerId;
     comp.triggerName = trigger.name;
     comp.action = Object.assign( new TriggerAction(), action );
+    comp.action.duration = +action.duration || 0;
     comp.action.displayText = `${trigger.name} --== ${res.result.groups.target} ==--`;
     comp.overlayId = action.overlayId;
     comp.matches = res.result;
     comp.timestamp = comp.action.secondaryPhrases?.length > 0 ? null : timestamp;
     comp.voiceIndex = voiceIndex;
     
-    logInstanceIds.push( comp.instanceId );
+    logInstanceIds.add( comp.instanceId );
     
     if ( comp.action.endingSoonDisplayText ) {
         comp.action.endingSoonText = StringUtilities.parseShortCodeValuesToLiteral( action.endingSoonText, characterName, comp.action.duration, res.result?.groups, res.result ? res.result[ 0 ] : null );
@@ -3104,7 +3117,7 @@ function displayDotTimerComponent( res, timestamp, action, deltaTime, trigger ) 
                 m.timestamp = timestamp;
                 m.action = 'setStart';
                 
-                logInstanceIds.push( m.instanceId );
+                logInstanceIds.add( m.instanceId );
                 
                 ipcRenderer.send( 'overlay:send:secondary-action', m );
             },
@@ -3172,7 +3185,7 @@ function displayDotTimerComponent( res, timestamp, action, deltaTime, trigger ) 
                 m.action = 'clipTimer';
                 m.timestamp = timestamp;
                 
-                logInstanceIds.push( m.instanceId );
+                logInstanceIds.add( m.instanceId );
                 
                 ipcRenderer.send( 'overlay:send:secondary-action', m );
             },
@@ -3215,7 +3228,7 @@ function displayTimerCountdownComponent(res, timestamp, action, deltaTime, trigg
     comp.triggerName = trigger.name;
     comp.action = Object.assign( new TriggerAction(), action );
     
-    logInstanceIds.push( comp.instanceId );
+    logInstanceIds.add( comp.instanceId );
 
     if ( comp.action.actionType !== ActionTypes.Stopwatch ) {
         if ( res.result?.groups?.timerDuration ) {
@@ -3420,7 +3433,7 @@ function displayTextComponent( res, timestamp, action, deltaTime, simulating, tr
     comp.triggerId = triggerId;
     comp.action = Object.assign( new TriggerAction(), action );
     
-    logInstanceIds.push( comp.instanceId );
+    logInstanceIds.add( comp.instanceId );
     
     comp.action.displayText = StringUtilities.parseShortCodeValuesToLiteral( comp.action.displayText, characterName, comp.action.duration, res.result?.groups, res.result ? res.result[ 0 ] : null );
     comp.action.displayText = StringUtilities.parseStoredVariablesToLiteral( comp.action.displayText, storedVariables );
@@ -3470,7 +3483,7 @@ function sendInformationToLog( info, duration ) {
         comp.action.actionId = nanoid();
         comp.action.actionType = ActionTypes.DisplayText;
         
-        logInstanceIds.push( comp.instanceId );
+        logInstanceIds.add( comp.instanceId );
         
         if ( typeof info === 'string' ) {
             comp.action.displayText = info.replace( /\s/gmi, '&nbsp;' );

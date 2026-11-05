@@ -3,6 +3,24 @@
 Each version's section is written to be pasted into its GitHub release
 description, which Nag shows in the Update Notes window.
 
+## v0.3.1 (unreleased)
+
+### Security
+- **Fixed a way for a shared trigger to run code.** A specially made `.nagshare` file could run script in the overlay window through a timer's duration. Durations are now always treated as numbers, Nag rejects share files with invalid trigger fields, and the overlay window no longer allows script from inside its page. Update before importing share files from people you don't know.
+- **Slow regular expressions no longer freeze your triggers for good.** Patterns that would hang now switch to a slower-to-start but safe matching engine where possible. If triggers still stop responding, Nag restarts them, and turns them off with a warning if it keeps happening. Share files with a pattern that could hang are rejected.
+- **Stored variable names can no longer damage Nag.** Names such as `__proto__` are now ignored.
+
+### Fixes
+- **Your settings and triggers are protected from crashes.** Saves can no longer leave a half-written file, and Nag keeps a backup copy of each one. If a file is damaged, Nag restores the backup, keeps the damaged file and tells you, instead of silently starting over.
+- **Log backups no longer lose logs.** Original log files are only removed after the archive has been written and checked. If a backup fails, your logs and your existing archive are left as they were.
+- **Importing no longer drops the wrong folder.** The import window could remove a folder containing triggers and keep an empty one instead.
+- **Overlays are no longer rewritten on every launch.** Nag was resetting each overlay's timer background color every time it started.
+- **The GINA importer tells you when GINA isn't found,** instead of waiting forever.
+
+### Performance
+- **Less disk activity at startup.** Nag no longer searches your whole home folder for GINA on every launch. It only looks when you open the GINA importer, and checks the usual places first.
+- **Less work while Nag runs.** Moving or resizing the window saves once it stops instead of on every movement, importing triggers saves character data once instead of once per trigger, and long sessions keep less history in memory.
+
 ## v0.3.0
 
 ### Fixes

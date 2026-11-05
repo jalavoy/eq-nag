@@ -1,13 +1,13 @@
 const ElectronUtilities = require( '../../utilities/electron' );
 const { DpsMeterSettings } = require( '../models/combat-parser' );
-const { UserPreferencesStoreModel, StyleProperties, QuickShareAuthorListTypes } = require( '../models/common' );
+const { UserPreferencesStoreModel, StyleProperties } = require( '../models/common' );
 const { FctStylesModel } = require( '../models/fct' );
 const { backupDatafile } = require( './backup-data-file' );
 const customAlphabet = require( 'nanoid' ).customAlphabet;
 const alphabet = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
 const nanoid = customAlphabet( alphabet, 16 );
 
-const currentUserPreferencesDbVersion = 11;
+const currentUserPreferencesDbVersion = 12;
 
 /**
  * 
@@ -91,9 +91,7 @@ function executeDataMigration( data ) {
     }
     if ( !data.version || data.version < 4 ) {
         
-        // QuickSharing should be enabled by default, so we use database
-        // upgrade to set that state.
-        data.enableQuickShareImports = true;
+        // This step set a quick share setting, which version 12 removes.
         data.version = 4;
 
     }
@@ -113,9 +111,7 @@ function executeDataMigration( data ) {
     }
     if ( !data.version || data.version < 7 ) {
         
-        // Set the master volume to 100%.
-        data.quickShareAuthorsList = [];
-        data.quickShareAuthorsListType = QuickShareAuthorListTypes.Disabled;
+        // This step set quick share settings, which version 12 removes.
         data.version = 7;
 
     }
@@ -158,6 +154,18 @@ function executeDataMigration( data ) {
         }
 
         data.version = 11;
+
+    }
+    if ( !data.version || data.version < 12 ) {
+
+        // Remove the settings for quick share codes and author profiles, which
+        // were features of the sharing service.
+        delete data.enableQuickShareImports;
+        delete data.quickShareAuthorsList;
+        delete data.quickShareAuthorsListType;
+        delete data.author;
+
+        data.version = 12;
 
     }
     

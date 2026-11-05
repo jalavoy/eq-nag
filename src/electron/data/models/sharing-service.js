@@ -1,12 +1,3 @@
-class AuthorModel {
-    /** @type {string} */
-    authorId = null;
-    /** @type {string} */
-    name = null;
-    /** @type {string} */
-    discord = null;
-}
-
 class SharedTriggerPermissions {
 
     /** @type {boolean} */
@@ -16,4 +7,4 @@ class SharedTriggerPermissions {
 
 }
 
-module.exports = { AuthorModel, SharedTriggerPermissions };
+module.exports = { SharedTriggerPermissions };

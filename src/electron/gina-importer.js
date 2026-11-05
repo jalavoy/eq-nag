@@ -16,6 +16,11 @@ var ginaConfigFileName = 'GINAConfig.xml';
 /** @type {string[]} */
 var importedGinaTriggers = [];
 
+/** How many levels of the home folder to search for GINA, after checking the usual places. */
+const ginaSearchDepth = 6;
+/** Large folders that aren't worth searching. */
+const ginaSearchSkipped = [ 'AppData', 'node_modules' ];
+
 class GinaImporter {
 
     /** @type {string} */
@@ -43,24 +48,6 @@ class GinaImporter {
      * @param {boolean} isDev Sets up the log watcher window for development environment if true.
      */
     initGinaImporter( mainWindowRef, isDev ) {
-        
-        mainWindowRef.whenReady( () => {
-            
-            mainWindowRef.reference.webContents.once( 'did-finish-load', () => {
-                queryGina( app.getPath( 'home' ), ginaPath => {
-                    ginaDataPath = ginaPath;
-                    var nameMatch = /\\Users\\(?<userName>.*)\\AppData/gi.exec( ginaDataPath );
-                    
-                    var logPath = ginaPath + '';
-                    if ( nameMatch?.groups?.userName ) {
-                        logPath = ginaPath.replace( nameMatch.groups.userName, '****' );
-                    }
-                    
-                    log.info( `gina path: ${logPath}` );
-                } );
-            } );
-
-        } );
         
         ipcMain.on( 'gina:get:configuration', ( event, triggerId ) => {
             getGinaConfig( jsonData => {
@@ -136,12 +123,25 @@ class GinaImporter {
  * 
  * @param {(json: any) => void} onLoaded This method is executed when the config file is loaded and parsed into a json string.
  */
-function getGinaConfig( onLoaded ) {
+async function getGinaConfig( onLoaded ) {
     // TODO: This should be done in a thread, with a direct reference to the GINA importer window.
-    let ginaConfigPath = path.join( ginaDataPath, ginaConfigFileName );
-    fs.readFile( ginaConfigPath, { encoding: 'utf8' }, ( err, data ) => {
-        parseStringPromise( data, { normalize: false, normalizeTags: false, explicitArray: false, ignoreAttrs: true } ).then( result => onLoaded( result ) );
-    } );
+    try {
+        // Only searched for when it's needed, and not on every launch.
+        ginaDataPath = ginaDataPath ?? await findGinaFolder();
+
+        if ( !ginaDataPath ) {
+            log.info( 'GINA was not found.' );
+            onLoaded( null );
+            return;
+        }
+
+        const data = await fs.promises.readFile( path.join( ginaDataPath, ginaConfigFileName ), { encoding: 'utf8' } );
+        onLoaded( await parseStringPromise( data, { normalize: false, normalizeTags: false, explicitArray: false, ignoreAttrs: true } ) );
+
+    } catch ( error ) {
+        log.error( 'Could not read the GINA configuration.', error );
+        onLoaded( null );
+    }
 }
 
 
@@ -154,29 +154,19 @@ function getGinaConfig( onLoaded ) {
 
 
 /**
- * Recursively searchs folder for installed GINA.
- * 
- * @param {string} folder The starting folder path.
- * @param {(path: string) => void} onFound Executed when the gina folder has been found.
+ * Returns the sub folders of the given folder.
+ *
+ * @param {string} folder The folder path.
+ * @returns {Promise<string[]>} The names of the sub folders.
  */
-function queryGina( folder, onFound ) {
-    fs.readdir( folder, { withFileTypes: true }, ( err, entities ) => {
-        if ( entities ) {
-            let folders = entities.filter( dirent => dirent.isDirectory() ).map( dirent => dirent.name );
-            for ( let dir of folders ) {
-                let childPath = path.join( folder, dir );
-                if ( childPath.indexOf( 'GimaSoft\\GINA' ) > -1 ) {
-                    onFound( childPath );
-                } else {
-                    try {
-                        queryGina( childPath, onFound );
-                    } catch ( error ) {
-                        // Usually directory read permissions, just ignore it.
-                    }
-                }
-            }
-        }
-    } );
+async function getSubFolders( folder ) {
+    try {
+        const entities = await fs.promises.readdir( folder, { withFileTypes: true } );
+        return entities.filter( dirent => dirent.isDirectory() ).map( dirent => dirent.name );
+    } catch ( error ) {
+        // Usually directory read permissions, just ignore it.
+        return [];
+    }
 }
 
 
@@ -187,5 +177,60 @@ function queryGina( folder, onFound ) {
 
 
 
+
+/**
+ * Finds the GINA data folder: first in the usual places, then by searching the
+ * user's home folder a level at a time, stopping at the first one found.
+ *
+ * @returns {Promise<string | null>} The path of the folder, or null if GINA wasn't found.
+ */
+async function findGinaFolder() {
+    const home = app.getPath( 'home' );
+    const appData = app.getPath( 'appData' );
+
+    const isGinaFolder = folder => /GimaSoft[\\/]GINA/i.test( folder ) && fs.existsSync( path.join( folder, ginaConfigFileName ) );
+
+    for ( const root of [ appData, process.env.LOCALAPPDATA ?? path.join( home, 'AppData', 'Local' ), app.getPath( 'documents' ), home ] ) {
+        const gimaSoft = path.join( root, 'GimaSoft' );
+        for ( const dir of await getSubFolders( gimaSoft ) ) {
+            if ( isGinaFolder( path.join( gimaSoft, dir ) ) ) {
+                return path.join( gimaSoft, dir );
+            }
+        }
+    }
+
+    let level = [ home ];
+    for ( let depth = 0; depth < ginaSearchDepth && level.length > 0; depth++ ) {
+        const nextLevel = [];
+
+        for ( const folder of level ) {
+            for ( const dir of await getSubFolders( folder ) ) {
+                const childPath = path.join( folder, dir );
+
+                if ( isGinaFolder( childPath ) ) {
+                    return childPath;
+                }
+                if ( !ginaSearchSkipped.includes( dir ) && !dir.startsWith( '.' ) ) {
+                    nextLevel.push( childPath );
+                }
+            }
+        }
+
+        level = nextLevel;
+    }
+
+    return null;
+}
+
+
+
+
+
+
+
+
+
+
+GinaImporter.findGinaFolder = findGinaFolder;
 
 module.exports = GinaImporter;

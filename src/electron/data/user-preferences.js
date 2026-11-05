@@ -3,14 +3,13 @@ const Store = require( './store' );
 const ForwardRef = require( '../forward-ref' );
 const path = require( 'path' );
 const fs = require( 'fs' );
-const { AuthorModel, SharedTriggerPermissions } = require( './models/sharing-service' );
+const { SharedTriggerPermissions } = require( './models/sharing-service' );
 const { FctStylesModel } = require( './models/fct' );
 const { StyleProperties, LogMaintenanceRules, LogMaintenanceHistory, UserPreferencesStoreModel } = require( './models/common' );
 const archiver = require( 'archiver' );
 const FsUtilities = require( '../utilities/file-system' );
 const LogBootstrapper = require( "../log-bootstrap" );
 const { DeathRecapPreferences } = require( '../data/models/death-recap' );
-const { QuickShareAuthorListTypes } = require( '../data/models/common' );
 const { GinaToNagOverlay } = require( "./models/trigger" );
 const log = require( 'electron-log' );
 const { DpsMeterSettings } = require( "./models/combat-parser" );
@@ -179,15 +178,6 @@ class UserPreferencesStore extends Store {
         this.storeDataFile( this.#data );
     }
 
-    /** @type {AuthorModel} */
-    get author() {
-        return this.#data.author;
-    }
-    set author( val ) {
-        this.#data.author = val;
-        this.storeDataFile( this.#data );
-    }
-
     get windowHeight() {
         return this.#data.windowBounds.height;
     }
@@ -218,6 +208,17 @@ class UserPreferencesStore extends Store {
     set windowY( val ) {
         this.#data.windowBounds.y = val;
         this.storeDataFile( this.#data );
+    }
+
+    /**
+     * Updates the position and size of the main window.  Dragging a window
+     * calls this constantly, so the save waits until the window stops moving.
+     *
+     * @param {{x: number, y: number, width: number, height: number}} bounds The window bounds.
+     */
+    setWindowBounds( bounds ) {
+        Object.assign( this.#data.windowBounds, bounds );
+        this.scheduleStoreDataFile( this.#data );
     }
 
     get logFile() {
@@ -392,38 +393,11 @@ class UserPreferencesStore extends Store {
     }
 
     /** @type {boolean} */
-    get enableQuickShareImports() {
-        return this.#data.enableQuickShareImports === true;
-    }
-    set enableQuickShareImports( val ) {
-        this.#data.enableQuickShareImports = val === true;
-        this.storeDataFile( this.#data );
-    }
-
-    /** @type {boolean} */
     get glowOnStartup() {
         return this.#data.glowOnStartup === true;
     }
     set glowOnStartup( val ) {
         this.#data.glowOnStartup = val === true;
-        this.storeDataFile( this.#data );
-    }
-
-    /** @type {QuickShareAuthorListTypes} */
-    get quickShareAuthorsListType() {
-        return this.#data.quickShareAuthorsListType;
-    }
-    set quickShareAuthorsListType( val ) {
-        this.#data.quickShareAuthorsListType = val;
-        this.storeDataFile( this.#data );
-    }
-
-    /** @type {string[]} */
-    get quickShareAuthorsList() {
-        return this.#data.quickShareAuthorsList ?? [];
-    }
-    set quickShareAuthorsList( val ) {
-        this.#data.quickShareAuthorsList = val ?? [];
         this.storeDataFile( this.#data );
     }
 
@@ -799,15 +773,6 @@ class UserPreferencesStore extends Store {
             this.emitChanges();
         } );
         
-        ipcMain.on( 'settings:set:quickShareImports', ( event, arg ) => {
-            this.enableQuickShareImports = arg;
-            sendTick();
-        } );
-
-        ipcMain.on( 'settings:get:quickShareImports', ( event ) => {
-            event.sender.send( 'settings:get:quickShareImports', this.enableQuickShareImports );
-        } );
-        
         ipcMain.on( 'settings:set:glowOnStartup', ( event, arg ) => {
             this.glowOnStartup = arg;
             sendTick();
@@ -815,24 +780,6 @@ class UserPreferencesStore extends Store {
 
         ipcMain.on( 'settings:get:glowOnStartup', ( event ) => {
             event.sender.send( 'settings:get:glowOnStartup', this.glowOnStartup );
-        } );
-        
-        ipcMain.on( 'settings:set:quickShareAuthorsListType', ( event, arg ) => {
-            this.quickShareAuthorsListType = arg;
-            sendTick();
-        } );
-
-        ipcMain.on( 'settings:get:quickShareAuthorsListType', ( event ) => {
-            event.sender.send( 'settings:get:quickShareAuthorsListType', this.quickShareAuthorsListType );
-        } );
-        
-        ipcMain.on( 'settings:set:quickShareAuthorsList', ( event, arg ) => {
-            this.quickShareAuthorsList = arg;
-            sendTick();
-        } );
-
-        ipcMain.on( 'settings:get:quickShareAuthorsList', ( event ) => {
-            event.sender.send( 'settings:get:quickShareAuthorsList', this.quickShareAuthorsList );
         } );
         
         ipcMain.on( 'settings:set:focus-effects', ( event, arg ) => {
@@ -886,14 +833,6 @@ class UserPreferencesStore extends Store {
 
         ipcMain.on( 'settings:get:phonetic-transforms', ( event ) => {
             event.sender.send( 'settings:get:phonetic-transforms', this.#data.phoneticTransforms );
-        } );
-
-        ipcMain.on( 'settings:set:author', ( event, author ) => {
-            this.author = author;
-        } );
-
-        ipcMain.on( 'settings:get:author', ( event ) => {
-            event.sender.send( 'settings:get:author', this.author );
         } );
 
         ipcMain.on( 'settings:set:minimizeToTrayOnLoad', ( event, minimizeToTrayOnLoad ) => {
@@ -1096,16 +1035,24 @@ class UserPreferencesStore extends Store {
              * @param {{keys: string[], value: string}} storeValue
              */
             ( event, storeValue ) => {
+                // These keys can come from a shared trigger or from text in the
+                // log, and these names would change every object in the process.
+                const unsafeKeys = [ '__proto__', 'constructor', 'prototype' ];
+                if ( !Array.isArray( storeValue.keys ) || storeValue.keys.some( key => typeof key !== 'string' || unsafeKeys.includes( key ) ) ) {
+                    log.warn( '[user-preferences] Ignored a stored variable with an invalid key.' );
+                    return;
+                }
+
                 this.persistentStorage = this.persistentStorage ? this.persistentStorage : {};
 
                 let storage = this.persistentStorage;
-                let mi = ( storeValue.keys?.length ?? 0 ) - 1;
+                let mi = storeValue.keys.length - 1;
 
-                for ( let i = 0; i < storeValue.keys?.length ?? 0; i++ ) {
+                for ( let i = 0; i < storeValue.keys.length; i++ ) {
                     if ( i === mi ) {
                         storage[ storeValue.keys[ i ] ] = storeValue.value;
                     } else {
-                        if ( !storage[ storeValue.keys[ i ] ] ) {
+                        if ( storage[ storeValue.keys[ i ] ] == null || typeof storage[ storeValue.keys[ i ] ] !== 'object' ) {
                             storage[ storeValue.keys[ i ] ] = {};
                         }
                         storage = storage[ storeValue.keys[ i ] ];

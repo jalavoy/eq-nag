@@ -4536,7 +4536,7 @@ function applyTimerSettings( overlayId, contentArea, comp, group ) {
     if ( comp.start == null ) {
         comp.dom.querySelector( 'span.time-remaining' ).innerHTML = `(??)&nbsp;`;
     } else if ( overlayInstances[ overlayId ].showDuration || comp.action.showDuration ) {
-        comp.dom.querySelector( 'span.time-remaining' ).innerHTML = `(${comp.action.duration})&nbsp;`;
+        comp.dom.querySelector( 'span.time-remaining' ).innerHTML = `(${getDurationLabel( comp.action.duration )})&nbsp;`;
     } else {
         comp.dom.querySelector( 'span.time-remaining' ).innerHTML = ``;
     }

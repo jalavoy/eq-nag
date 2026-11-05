@@ -1,6 +1,7 @@
 const { BrowserWindow, dialog, ipcMain } = require( 'electron' );
 const fs = require( 'fs' );
 const log = require( 'electron-log' );
+const { canHang } = require( './utilities/regex-safety' );
 const customAlphabet = require( 'nanoid' ).customAlphabet;
 const nanoid = customAlphabet( '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz', 16 );
 
@@ -70,6 +71,81 @@ function isValidFolder( folder, depth = 0 ) {
 
 
 /**
+ * Returns true if the given value is empty, a number, or text containing only a number.
+ *
+ * @param {any} value The value to evaluate.
+ */
+function isNumeric( value ) {
+    return value == null
+        || value === ''
+        || ( typeof value === 'number' && Number.isFinite( value ) )
+        || ( typeof value === 'string' && value.trim() !== '' && Number.isFinite( +value ) );
+}
+
+
+
+
+
+
+
+
+
+/**
+ * Returns true if the given value is empty or text.
+ *
+ * @param {any} value The value to evaluate.
+ */
+function isText( value ) {
+    return value == null || typeof value === 'string';
+}
+
+
+
+
+
+
+
+
+
+/**
+ * Returns true if the properties of the given action have the expected types.
+ *
+ * @param {any} action The action to evaluate.
+ */
+function isValidAction( action ) {
+    return isObject( action )
+        && [ 'duration', 'repeatCount', 'endingDuration', 'castTime' ].every( key => isNumeric( action[ key ] ) )
+        && [ 'overlayId', 'displayText', 'timerIcon', 'storageDuration' ].every( key => isText( action[ key ] ) );
+}
+
+
+
+
+
+
+
+
+
+/**
+ * Returns true if the given capture phrase has the expected types.
+ *
+ * @param {any} phrase The capture phrase to evaluate.
+ */
+function isValidCapturePhrase( phrase ) {
+    return isObject( phrase )
+        && isText( phrase.phrase )
+        && isNumeric( phrase.duration );
+}
+
+
+
+
+
+
+
+
+
+/**
  * Returns true if the given trigger has the properties required to install it.
  *
  * @param {any} trigger The trigger to evaluate.
@@ -80,8 +156,9 @@ function isValidTrigger( trigger ) {
         && typeof trigger.folderId === 'string'
         && typeof trigger.name === 'string'
         && Array.isArray( trigger.capturePhrases )
+        && trigger.capturePhrases.every( isValidCapturePhrase )
         && Array.isArray( trigger.actions )
-        && trigger.actions.every( isObject );
+        && trigger.actions.every( isValidAction );
 }
 
 
@@ -140,6 +217,11 @@ function validateShareFile( share, expectedType ) {
         }
         if ( !Array.isArray( model.folders ) || !model.folders.every( f => isValidFolder( f ) ) ) {
             return 'This share file contains invalid folders.';
+        }
+
+        const unsafe = model.triggers.find( canHang );
+        if ( unsafe ) {
+            return `The trigger "${unsafe.name}" has a regular expression that could freeze Nag, so this share file can't be imported.`;
         }
     }
 

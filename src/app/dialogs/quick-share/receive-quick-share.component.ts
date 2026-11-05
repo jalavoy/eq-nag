@@ -188,7 +188,7 @@ export class ReceiveQuickShareDialogComponent implements OnInit {
         }
 
         for ( let i = ri.length - 1; i >= 0; i-- ) {
-            folders.splice( i, 1 );
+            folders.splice( ri[ i ], 1 );
         }
 
     }

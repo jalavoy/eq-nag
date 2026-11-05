@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, screen } = require( "electron" );
+const { app, BrowserWindow, dialog, ipcMain, screen } = require( "electron" );
 const fs = require('fs');
 const fsp = fs.promises;
 const CharacterDatabaseStore = require( './data/character-database' );
@@ -9,7 +9,7 @@ const FsUtilities = require( "./utilities/file-system" );
 const log = require( 'electron-log' );
 const ForwardRef = require( './forward-ref' );
 const { LogMaintenancePlanTypes, LogMaintenanceRules, ArchiveFilePrefix, SimulationProgress } = require( "./data/models/common" );
-const { nagLog } = require( "./utilities/nag-console" );
+const { isSuspect } = require( "./utilities/regex-safety" );
 const CombatDatabase = require( "./data/combat-database" );
 const customAlphabet = require( 'nanoid' ).customAlphabet;
 const alphabet = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
@@ -39,6 +39,12 @@ class LogWatcherMeta {
 
     /** @type {number} */
     intervalId;
+
+    /** @type {number[]} The times that this log watcher stopped responding. */
+    hangTimes;
+
+    /** @type {boolean} True if this log watcher keeps hanging, and shouldn't be restarted. */
+    hangBlocked;
 }
 
 class CombatWatcherMeta {
@@ -54,6 +60,16 @@ class CombatWatcherMeta {
 
 /** @type {Record<string, LogWatcherMeta>} Dictionary of log watcher windows. */
 var logWatchers = {};
+
+/** @type {any[]} The latest list of triggers. */
+var latestTriggers = [];
+
+const watchdogIntervalMs = 5 * 1000;
+/** A log watcher that misses this many pings in a row is hung. */
+const watchdogMissedPingLimit = 6;
+/** A log watcher that hangs this many times in the time window isn't restarted. */
+const watchdogHangLimit = 3;
+const watchdogHangWindowMs = 10 * 60 * 1000;
 
 /** @type {boolean} */
 var userSelectedCombatWatcher = false;
@@ -151,7 +167,7 @@ class LogBootstrapper {
                     logWatchers[ key ].window.webContents.send( 'tick', tickData );
                 }
             }
-            combatWatcher.window?.webContents.send( 'tick', tickData );
+            sendTickToCombatWatcher( tickData );
         } );
 
         ipcMain.on( 'log:send:raw', function ( event, data ) {
@@ -636,7 +652,6 @@ class LogBootstrapper {
 
                 if ( logFiles.length === 0 ) {
                     log.info( 'LogBootstrap > No log files to backup, exiting.' );
-                    nagLog( 'No log files to backup.' );
                     resolve();
                     return;
                 }
@@ -784,7 +799,7 @@ class LogBootstrapper {
                 // Reset the null attempt count.
                 logWatchers[ characterId ].nullAttemptCount = 0;
 
-                if ( logWatchers[ characterId ].window == null ) {
+                if ( logWatchers[ characterId ].window == null && !logWatchers[ characterId ].hangBlocked ) {
 
                     // If the window has not been engaged, then open it. // TODO: Start up a log watcher when simulating. Even allow a charcter to be selected from a list.
                     logWatchers[ characterId ].window = startLogWatcherWindow( _chr.logFile, isDev, sendTick, _chr, logWatchers[ characterId ].logSize > _stats.size ? 0 : logWatchers[ characterId ].logSize );
@@ -941,6 +956,7 @@ class LogBootstrapper {
      * @param {CharacterDatabaseStore} characterDatabase The character database.
      */
     tick( tickData, characterDatabase ) {
+        latestTriggers = tickData.triggers ?? latestTriggers;
         for ( let key in logWatchers ) {
             if ( logWatchers.hasOwnProperty( key ) && logWatchers[ key ].window != null ) {
                 logWatchers[ key ].model = characterDatabase.find( key );
@@ -948,7 +964,7 @@ class LogBootstrapper {
                 logWatchers[ key ].window.webContents.send( 'tick', tickData );
             }
         }
-        combatWatcher.window?.webContents.send( 'tick', tickData );
+        sendTickToCombatWatcher( tickData );
     }
 
 
@@ -1042,6 +1058,7 @@ function startLogWatcherWindow( logFile, isDev, sendTick, character, logPosition
         logWatcherWindow.webContents.send( 'log:changed', logFile );
         sendTick();
     } );
+    watchForHang( logWatcherWindow, character );
     logWatcherWindow.setPosition( 100, 500 );
 
     if ( combatWatcher?.character == null ) {
@@ -1049,6 +1066,118 @@ function startLogWatcherWindow( logFile, isDev, sendTick, character, logPosition
     }
 
     return logWatcherWindow;
+}
+
+
+
+
+
+
+
+
+
+
+/**
+ * Sends the tick to the combat watcher, which doesn't use the list of triggers.
+ *
+ * @param {any} tickData The tick data.
+ */
+function sendTickToCombatWatcher( tickData ) {
+    combatWatcher.window?.webContents.send( 'tick', { ...tickData, triggers: undefined, folders: undefined } );
+}
+
+
+
+
+
+
+
+
+
+
+/**
+ * Closes the log watcher window if it stops responding, which a slow regular
+ * expression in a trigger can cause.  The next line in the log file starts a
+ * new one that begins at the end of the file, so it doesn't repeat the same work.
+ *
+ * @param {BrowserWindow} window The log watcher window.
+ * @param {CharacterModel} character The character being watched.
+ */
+function watchForHang( window, character ) {
+    // The page gets extra time to load before its first reply.
+    let missedPings = -watchdogMissedPingLimit;
+
+    window.webContents.ipc.on( 'log:watchdog:pong', () => {
+        missedPings = 0;
+    } );
+
+    const intervalId = setInterval( () => {
+        if ( window.isDestroyed() ) {
+            clearInterval( intervalId );
+            return;
+        }
+
+        if ( !logWatchers[ character.characterId ]?.simulating && ++missedPings >= watchdogMissedPingLimit ) {
+            clearInterval( intervalId );
+            onLogWatcherHung( window, character );
+            return;
+        }
+
+        window.webContents.send( 'log:watchdog:ping' );
+    }, watchdogIntervalMs );
+
+    window.on( 'closed', () => clearInterval( intervalId ) );
+}
+
+
+
+
+
+
+
+
+
+
+/**
+ * Closes the hung log watcher, and stops restarting it if it keeps hanging.
+ *
+ * @param {BrowserWindow} window The log watcher window.
+ * @param {CharacterModel} character The character being watched.
+ */
+function onLogWatcherHung( window, character ) {
+    const meta = logWatchers[ character.characterId ];
+    const now = Date.now();
+
+    log.error( `[LogBootstrap] The log watcher for ${character.name} stopped responding.` );
+
+    // Cleared first, because nothing should use this window once closing it starts.
+    if ( meta ) {
+        meta.window = null;
+    }
+
+    // The renderer process is stuck, so it has to be ended instead of asked to close.
+    window.webContents.forcefullyCrashRenderer();
+    window.destroy();
+
+    if ( !meta ) {
+        return;
+    }
+
+    meta.hangTimes = ( meta.hangTimes ?? [] ).filter( time => now - time < watchdogHangWindowMs ).concat( now );
+    mainWinRef?.reference?.webContents.send( 'log:character:deactivated', character.characterId );
+
+    if ( meta.hangTimes.length >= watchdogHangLimit ) {
+        meta.hangBlocked = true;
+
+        const suspects = latestTriggers.filter( isSuspect ).map( trigger => `- ${trigger.name}` );
+        dialog.showMessageBox( {
+            type: 'warning',
+            title: 'Nag',
+            message: `Triggers for ${character.name} have been turned off`,
+            detail: `They stopped responding ${meta.hangTimes.length} times in 10 minutes, which is usually caused by a slow regular expression in a trigger.  Fix or disable the trigger, then restart Nag.`
+                + ( suspects.length > 0 ? `\n\nThese triggers have regular expressions that can be slow:\n${suspects.join( '\n' )}` : '' ),
+        } );
+    }
 }
 
 

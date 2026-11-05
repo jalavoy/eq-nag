@@ -295,11 +295,14 @@ class CharacterDatabaseStore extends Store {
      * @param {string} triggerId The id of the trigger.
      */
     addToDisabledByDefaultTriggers( triggerId ) {
-        
+
+        let changed = false;
+
         // Update all trigger profiles.
         this.#data.triggerProfiles.forEach( tp => {
             if ( tp.disableTriggersByDefault === true && tp.disabledTriggers.indexOf( triggerId ) < 0 ) {
                 tp.disabledTriggers.push( triggerId );
+                changed = true;
             }
         } );
 
@@ -308,10 +311,14 @@ class CharacterDatabaseStore extends Store {
             let profile = this.#data.triggerProfiles.find( tp => tp.profileId === c.triggerProfileId );
             if ( ( c.disableTriggersByDefault === true || profile?.disableTriggersByDefault === true ) && c.disabledTriggers.indexOf( triggerId ) < 0 ) {
                 c.disabledTriggers.push( triggerId );
+                changed = true;
             }
         } );
-        
-        this.storeDataFile( this.#data );
+
+        // Importing calls this once for every new trigger.
+        if ( changed ) {
+            this.scheduleStoreDataFile( this.#data );
+        }
     }
 
 

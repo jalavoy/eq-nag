@@ -3,7 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="Content-Security-Policy" content="img-src 'self' file: data: blob:; media-src 'self' file: data: blob:; font-src 'self' file: data: https://fonts.gstatic.com https://cdnjs.cloudflare.com;" />
+    <!-- unsafe-eval is for Handlebars, which compiles this page's templates at runtime.  Inline script and event handlers stay blocked. -->
+    <meta http-equiv="Content-Security-Policy" content="img-src 'self' file: data: blob:; media-src 'self' file: data: blob:; font-src 'self' file: data: https://fonts.gstatic.com https://cdnjs.cloudflare.com; script-src 'self' 'unsafe-eval' https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.1/js/all.min.js; object-src 'none'; base-uri 'none';" />
     <title>Nag Renderer</title>
 
     <link href="https://fonts.googleapis.com/css2?family=Open+Sans+Condensed:ital,wght@0,300;0,700;1,300&family=Oswald:wght@200;300;400;500;600;700&family=Press+Start+2P&family=Ranchers&family=Red+Rose:wght@300;400;700&family=Roboto+Mono:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;1,100;1,200;1,300;1,400;1,500;1,600;1,700&family=Roboto:ital,wght@0,100;0,300;0,400;0,500;0,700;0,900;1,100;1,300;1,400;1,500;1,700;1,900&display=swap" rel="stylesheet">
@@ -14,7 +15,7 @@
 
 
     <!-- Font Awesome library for guildantix -->
-    <script> FontAwesomeConfig = { autoReplaceSvg: false } </script>
+    <script src="renderer-config.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.1/css/all.min.css" integrity="sha512-5Hs3dF2AEPkpNAR7UiOHba+lRSJNeM2ECkwxUIxC1Q/FLycGTbNapWXB4tP889k5T5Ju8fs4b1P5z/iB4nMfSQ==" crossorigin="anonymous">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.1/js/all.min.js" integrity="sha512-1JkMy1LR9bTo3psH+H4SV5bO2dFylgOy+UJhMus1zF4VEFuZVu5lsi4I6iIndE4N9p01z1554ZDcvMSjMaqCBQ==" crossorigin="anonymous"></script>
 
@@ -520,23 +521,7 @@
 </head>
 <body>
 
-    <script type="text/javascript">
-        const urlParams = new URLSearchParams( window.location.search );
-        var Renderer = window.api.getRenderer();
-        var data = Renderer( +urlParams.get( 'originX' ), +urlParams.get( 'originY' ), urlParams.get('glowOnStart') === 'true' );
-
-        var recordEncounters = false;
-        function toggleRecordEncounters() {
-            recordEncounters = !recordEncounters;
-            window.api.recordEncounters(recordEncounters);
-
-            if (recordEncounters) {
-                document.getElementById('encounterRecordBtn').classList.add('record-enabled');
-            } else {
-                document.getElementById('encounterRecordBtn').classList.remove('record-enabled');
-            }
-        }
-    </script>
+    <script src="renderer-page.js"></script>
 
     <style>
         .list-container {
@@ -1115,9 +1100,9 @@
                 <!-- <span class="window-title-col title-btn mouse-show"><i class="fa-solid fa-table-columns"></i></span> -->
                 <!-- <span class="window-title-col title-btn mouse-show"><i class="fa-solid fa-magnifying-glass-chart"></i><span class="tooltip">Select Columns</span></span> -->
                 <!-- <span class="window-title-col title-btn mouse-show" onclick="window.api.showSettings('combatDatabase')"><i class="fa-solid fa-user-check"></i><span class="tooltip">Edit Data</span></span> -->
-                <span class="window-title-col title-btn mouse-show" onclick="window.api.showSettings('combatStatistics')"><i class="fas fa-gear"></i><span class="tooltip">Settings</span></span>
+                <span class="window-title-col title-btn mouse-show show-combat-settings"><i class="fas fa-gear"></i><span class="tooltip">Settings</span></span>
                 <span class="window-title-col title-btn mouse-show clear-encounter"><i class="fa-solid fa-ban"></i><span class="tooltip">Clear History</span></span>
-                <span class="window-title-col title-btn mouse-show record-button" id="encounterRecordBtn" onclick="toggleRecordEncounters()"><i class="fa-solid fa-circle"></i><span class="tooltip">Record</span></span>
+                <span class="window-title-col title-btn mouse-show record-button" id="encounterRecordBtn"><i class="fa-solid fa-circle"></i><span class="tooltip">Record</span></span>
                 <span class="window-title-col title-btn mouse-show database-dropdown-menu"><i class="fa-solid fa-database"></i><span class="tooltip">Change View</span></span>
                 <span class="window-title-col right-pad"></span>
             </div>

@@ -53,10 +53,10 @@ const logCriticalFailure = ( err, critical ) => {
 const readChunk = ( logFile, fileStats, startPos ) => {
 
     /** @type {Promise<Buffer>} */
-    let p = new Promise( resolve => {
+    let p = new Promise( ( resolve, reject ) => {
         fs.open( logFile, 'r', ( err, fileNo ) => {
             if ( err ) {
-                resolve( null );
+                reject( err );
             } else {
 
                 startPos = startPos > 0 ? startPos : 0;
@@ -65,7 +65,14 @@ const readChunk = ( logFile, fileStats, startPos ) => {
 
 
                 fs.read( fileNo, Buffer.alloc( myChunkSize ), 0, myChunkSize, startPos, ( err, bytecount, buff ) => {
-                
+
+                    fs.close( fileNo, () => { } );
+
+                    if ( err ) {
+                        reject( err );
+                        return;
+                    }
+
                     let i = buff.length - 1;
                     for ( ; i >= 0; i-- ) {
                         if ( buff[ i ] == 13 || buff[ i ] == 10 ) {
@@ -97,31 +104,37 @@ const readChunk = ( logFile, fileStats, startPos ) => {
 
 
 /**
- * Writes the current chunk data.
- * 
- * @returns Returns an error object if an error was thrown.
- * 
+ * Writes the archive to a temporary file, checks that it can be read back, and
+ * only then replaces the existing archive.  If anything fails, this throws and
+ * the existing archive is left as it was.
+ *
+ * @returns {Promise<AdmZip>} Returns the archive that was written, to add the next chunk to.
+ *
  * @param {AdmZip} archive The AdmZip object.
  * @param {string} logArchivePath The full file path to the archive.
  */
-const writeChunk = ( archive, logArchivePath ) => {
+const writeChunk = async ( archive, logArchivePath ) => {
 
-    let p = new Promise( resolve => {
+    const tempPath = `${logArchivePath}.tmp`;
 
-        archive.writeZip( logArchivePath, error => {
-    
-            if ( error ) {
-                log.error( error );
-    
-            }
-        
-            resolve( { error: error } );
-
+    try {
+        await new Promise( ( resolve, reject ) => {
+            archive.writeZip( tempPath, error => error ? reject( error ) : resolve() );
         } );
 
-    } );
+        const written = new AdmZip( tempPath );
+        if ( written.getEntries().length !== archive.getEntries().length ) {
+            throw new Error( `The log archive was not written correctly: ${tempPath}` );
+        }
 
-    return p;
+        await fsp.rename( tempPath, logArchivePath );
+
+        return new AdmZip( logArchivePath );
+
+    } catch ( error ) {
+        await fsp.rm( tempPath, { force: true } ).catch( () => { } );
+        throw error;
+    }
 };
 
 
@@ -224,9 +237,8 @@ const backup = async ( logFilePaths, everquestInstallFolder, backupIndex ) => {
 
                 log.info( `LogBackup > Adding to the archive: ${archiveName}.` );
                 archive.addFile( archiveName, chunkBuffer );
-                await writeChunk( archive, logArchivePath );
+                archive = await writeChunk( archive, logArchivePath );
                 writeCount++;
-                archive = new AdmZip( logArchivePath );
 
                 reportProgress( writeCount, writeOperationCount );
             }
@@ -236,8 +248,7 @@ const backup = async ( logFilePaths, everquestInstallFolder, backupIndex ) => {
 
             log.info( `LogBackup > Adding to the archive: ${archiveName}.` );
             archive.addLocalFile( logFileMeta.logFile, '', archiveName );
-            await writeChunk( archive, logArchivePath );
-            archive = new AdmZip( logArchivePath );
+            archive = await writeChunk( archive, logArchivePath );
             writeCount++;
 
             reportProgress( writeCount, writeOperationCount );
@@ -250,10 +261,11 @@ const backup = async ( logFilePaths, everquestInstallFolder, backupIndex ) => {
 
     log.info( 'LogBackup > Backup done, beginning cleanup.' );
 
-    processedFiles.forEach( async logFile => {
+    // Everything is safely in the archive by now, so a file that can't be deleted isn't a failed backup.
+    for ( const logFile of processedFiles ) {
         log.info( `LogBackup > Deleting file ${logFile}` );
-        await fsp.rm( logFile );
-    } );
+        await fsp.rm( logFile ).catch( error => log.error( `LogBackup > Could not delete ${logFile}`, error ) );
+    }
 
     log.info( 'LogBackup > Clean up done.' );
 
@@ -503,9 +515,8 @@ const backupBySchedule = async ( logFilePaths, everquestInstallFolder, daysOfWee
 
                 log.info( `LogBackup > Adding to the archive: ${_fileName}.` );
                 archive.addFile( archiveName, chunkBuffer );
-                await writeChunk( archive, logArchivePath );
+                archive = await writeChunk( archive, logArchivePath );
                 writeCount++;
-                archive = new AdmZip( logArchivePath );
 
                 reportProgress( writeCount, writeOperationCount );
             }
@@ -516,8 +527,7 @@ const backupBySchedule = async ( logFilePaths, everquestInstallFolder, daysOfWee
             log.info( `LogBackup > Adding to the archive: ${_fileName}.` );
             archive.addLocalFile( path.join( logArchiveProcDir, logFileMeta.logFile ), '', archiveName );
 
-            await writeChunk( archive, logArchivePath );
-            archive = new AdmZip( logArchivePath );
+            archive = await writeChunk( archive, logArchivePath );
             writeCount++;
 
             reportProgress( writeCount, writeOperationCount );
@@ -539,12 +549,13 @@ const backupBySchedule = async ( logFilePaths, everquestInstallFolder, daysOfWee
     log.info( 'LogBackup > Deleting archive source folder.' );
     await fsp.rmdir( logArchiveProcDir );
 
-    logFilePaths.forEach( async logFile => {
+    for ( const logFile of logFilePaths ) {
         log.info( `LogBackup > Deleting file ${logFile}` );
         // TODO: Enable file deletion.
         // await fsp.unlink( logFile );
-        await fsp.rename( logFile, FsUtilities.Path.prependFilename( logFile, '-' + FsUtilities.getFileTimestamp() ) );
-    } );
+        await fsp.rename( logFile, FsUtilities.Path.prependFilename( logFile, '-' + FsUtilities.getFileTimestamp() ) )
+            .catch( error => log.error( `LogBackup > Could not rename ${logFile}`, error ) );
+    }
 
     log.info( 'LogBackup > Clean up done.' );
 
@@ -574,10 +585,15 @@ const backupBySchedule = async ( logFilePaths, everquestInstallFolder, daysOfWee
  * @param {number} backupIndex The index of this backup event in the history.
  */
 function LogBackup( logFiles, everquestInstallFolder, daysOfWeek, backupIndex ) {
+    const failed = error => {
+        log.error( 'LogBackup > The backup failed, so no log files were removed.', error );
+        logCriticalFailure( error?.stack ?? `${error}`, 'The log backup failed, so no log files were removed.' );
+    };
+
     if ( daysOfWeek == null || daysOfWeek.length === 0 ) {
-        backup( logFiles, everquestInstallFolder, backupIndex ).then( () => { } );
+        backup( logFiles, everquestInstallFolder, backupIndex ).catch( failed );
     } else {
-        backupBySchedule( logFiles, everquestInstallFolder, daysOfWeek ?? [], backupIndex ?? 0 ).then( () => { } );
+        backupBySchedule( logFiles, everquestInstallFolder, daysOfWeek ?? [], backupIndex ?? 0 ).catch( failed );
     }
 }
 

@@ -176,6 +176,29 @@ function _concat( ...arrays ) {
 
 
 
+/**
+ * Removes every entry of the given dictionary with a numeric key below the given value.
+ *
+ * @param {Record<number, any>} dictionary The dictionary.
+ * @param {number} minimum The lowest key to keep.
+ */
+function _removeKeysBelow( dictionary, minimum ) {
+    for ( const key of Object.keys( dictionary ) ) {
+        if ( +key < minimum ) {
+            delete dictionary[ key ];
+        }
+    }
+}
+
+
+
+
+
+
+
+
+
+
 const ArrayUtilities = {
     remove: remove,
     findIndex: findIndex,
@@ -183,6 +206,7 @@ const ArrayUtilities = {
     getSize: _getSize,
     distinctPush: _distinctPush,
     concat: _concat,
+    removeKeysBelow: _removeKeysBelow,
 };
 
 module.exports = ArrayUtilities;

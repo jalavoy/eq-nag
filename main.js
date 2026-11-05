@@ -246,17 +246,8 @@ function createWindow() {
         await logBootstrap.unload();
     } );
 
-    mainWindow.on( 'resize', function ( e ) {
-        let bounds = mainWindow.webContents.getOwnerBrowserWindow().getBounds();
-        userPreferences.windowWidth = bounds.width;
-        userPreferences.windowHeight = bounds.height;
-    } );
-
-    mainWindow.on( 'move', function () {
-        let bounds = mainWindow.webContents.getOwnerBrowserWindow().getBounds();
-        userPreferences.windowX = bounds.x;
-        userPreferences.windowY = bounds.y;
-    } );
+    mainWindow.on( 'resize', () => userPreferences.setWindowBounds( mainWindow.getBounds() ) );
+    mainWindow.on( 'move', () => userPreferences.setWindowBounds( mainWindow.getBounds() ) );
 
     mainWindow.webContents.once( 'dom-ready', () => {
         sendTick();
@@ -267,7 +258,7 @@ function createWindow() {
 
         // TODO: Remove this in a few versions.
         let overlays = overlayDatabase.getAll();
-        overlays.forEach( overlay => {
+        overlays.filter( overlay => !overlay.timerBackgroundColor && overlay.timerColor ).forEach( overlay => {
             mainWindow.webContents.send( 'color:darken', { overlayId: overlay.overlayId, color: overlay.timerColor } );
         } );
 
@@ -288,6 +279,9 @@ function createWindow() {
 };
 
 app.commandLine.appendSwitch( 'enable-speech-dispatcher' );
+// A regular expression from a trigger that backtracks excessively switches to a
+// linear-time engine instead of hanging, for every pattern that engine supports.
+app.commandLine.appendSwitch( 'js-flags', '--enable-experimental-regexp-engine-on-excessive-backtracks' );
 
 app.on( 'before-quit', async () => {
     trayMenu.destroy();
@@ -1002,23 +996,28 @@ ipcMain.on( 'main:active-window:unsubscribe', ( event ) => {
 } );
 
 const checkActiveWindow = async () => {
-    let data = await activeWindow();
+    try {
+        let data = await activeWindow();
 
-    if ( nagProcessId == undefined && (data?.owner?.name === 'Electron' || data?.owner?.name === 'EQ Nag') && data?.title === 'Nag' ) {
-        nagProcessId = data?.owner?.processId;
-    }
-    
-    if ( activeWinInfo?.id !== data?.id ) {
-        activeWinInfo = new WinInfo( data, nagProcessId );
+        if ( nagProcessId == undefined && (data?.owner?.name === 'Electron' || data?.owner?.name === 'EQ Nag') && data?.title === 'Nag' ) {
+            nagProcessId = data?.owner?.processId;
+        }
 
-        for ( let i = activeWindowSubscribers.length - 1; i >= 0; i-- ) {
-            const webContents = activeWindowSubscribers[ i ];
-            if ( !webContents?.isDestroyed() ) {
-                webContents.send( 'active-window:changed', activeWinInfo );
-            } else {
-                activeWindowSubscribers.splice( i, 1 );
+        if ( activeWinInfo?.id !== data?.id ) {
+            activeWinInfo = new WinInfo( data, nagProcessId );
+
+            for ( let i = activeWindowSubscribers.length - 1; i >= 0; i-- ) {
+                const webContents = activeWindowSubscribers[ i ];
+                if ( !webContents?.isDestroyed() ) {
+                    webContents.send( 'active-window:changed', activeWinInfo );
+                } else {
+                    activeWindowSubscribers.splice( i, 1 );
+                }
             }
         }
+    } catch ( error ) {
+        // A failed check shouldn't stop the checks that follow it.
+        log.error( '[main] Could not get the active window.', error );
     }
 
     setTimeout( checkActiveWindow, 100 );
