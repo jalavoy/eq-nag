@@ -3,12 +3,13 @@
 Each version's section is written to be pasted into its GitHub release
 description, which Nag shows in the Update Notes window.
 
-## v0.3.1 (unreleased)
+## v0.3.1
 
 ### Security
 - **Fixed a way for a shared trigger to run code.** A specially made `.nagshare` file could run script in the overlay window through a timer's duration. Durations are now always treated as numbers, Nag rejects share files with invalid trigger fields, and the overlay window no longer allows script from inside its page. Update before importing share files from people you don't know.
 - **Slow regular expressions no longer freeze your triggers for good.** Patterns that would hang now switch to a slower-to-start but safe matching engine where possible. If triggers still stop responding, Nag restarts them, and turns them off with a warning if it keeps happening. Share files with a pattern that could hang are rejected.
 - **Stored variable names can no longer damage Nag.** Names such as `__proto__` are now ignored.
+- **Removed the old Allakhazam code.** The generators were removed in v0.3.0, but the code behind them was still in the app. It put web pages into Nag without cleaning them, so it's now gone completely. Triggers made from Allakhazam keep working, and DoT and Buff timers can still be re-imported from EQ Spell Resources.
 
 ### Fixes
 - **Your settings and triggers are protected from crashes.** Saves can no longer leave a half-written file, and Nag keeps a backup copy of each one. If a file is damaged, Nag restores the backup, keeps the damaged file and tells you, instead of silently starting over.
@@ -20,6 +21,9 @@ description, which Nag shows in the Update Notes window.
 ### Performance
 - **Less disk activity at startup.** Nag no longer searches your whole home folder for GINA on every launch. It only looks when you open the GINA importer, and checks the usual places first.
 - **Less work while Nag runs.** Moving or resizing the window saves once it stops instead of on every movement, importing triggers saves character data once instead of once per trigger, and long sessions keep less history in memory.
+
+### Other changes
+- **Removed leftover settings** for quick share codes and author profiles, including any saved author name. These features were removed in v0.3.0. A copy of your settings is kept before they're removed.
 
 ## v0.3.0
 
