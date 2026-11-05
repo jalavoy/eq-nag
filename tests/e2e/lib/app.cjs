@@ -4,10 +4,6 @@ const fs = require( 'fs' );
 const os = require( 'os' );
 const path = require( 'path' );
 
-// tools/perf/cdp.mjs uses the WebSocket built into Node 22. CI builds on Node 18.
-const ws = require( 'ws' );
-globalThis.WebSocket ??= ws.WebSocket ?? ws;
-
 const root = path.resolve( __dirname, '../../..' );
 const devToolsPort = 9336;
 const inspectPort = 9337;
@@ -77,7 +73,7 @@ async function open( target, errors ) {
  */
 async function start( exe, profile ) {
     const { targets } = await import( '../../../tools/perf/cdp.mjs' );
-    const child = spawn( exe, [ `--user-data-dir=${profile}`, `--remote-debugging-port=${devToolsPort}`, `--inspect=${inspectPort}` ], { stdio: 'ignore' } );
+    const child = spawn( exe, [ `--user-data-dir=${profile}`, `--remote-debugging-port=${devToolsPort}`, `--inspect=${inspectPort}` ], { stdio: 'ignore', env: { ...process.env, NAG_NO_UPDATES: '1' } } );
     const pages = async () => ( await targets( devToolsPort ) ).filter( t => t.type === 'page' );
     const app = { child, pages, profile };
 

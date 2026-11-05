@@ -12,6 +12,7 @@ raid:
 
 ```
 npx ng build --configuration=production
+npx install-electron
 npm run perf -- --log "C:\EverQuest\Logs\eqlog_Name_server.txt"
 ```
 

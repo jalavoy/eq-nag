@@ -98,7 +98,8 @@ autoUpdater.logger = log;
 var nagProcessId = undefined;
 const allowMultipleInstances = false;
 const fs = await import( 'fs' );
-var doUpdateCheck = true;
+// NAG_NO_UPDATES=1 turns updates off, so that test runs can't download or install one.
+var doUpdateCheck = process.env.NAG_NO_UPDATES !== '1';
 
 
 import remoteMain from '@electron/remote/main/index.js';
@@ -753,7 +754,7 @@ ipcMain.on( 'app:version', ( event ) => {
 } );
 
 ipcMain.on( 'clipboard:writeText', ( event, value ) => {
-    clipboard.writeText( value );
+    clipboard.writeText( value ).catch( error => log.error( '[main:clipboard] Could not write to the clipboard.', error ) );
 } );
 
 var pseudoClipboard = {};

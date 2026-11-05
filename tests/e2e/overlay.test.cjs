@@ -24,6 +24,15 @@ const work = createWorkFolder();
         check( 'The Font Awesome config applies', await r.eval( `window.FontAwesomeConfig?.autoReplaceSvg === false` ) );
         check( 'The Font Awesome script loads', await r.eval( `!!window.FontAwesome` ) );
 
+        // Nag's foreground window check keeps going after an error, so a failure wouldn't show up anywhere else.
+        const foreground = await combat.eval( `new Promise( done => {
+            const { ipcRenderer } = require( 'electron' );
+            ipcRenderer.once( 'active-window:changed', ( e, info ) => done( info ) );
+            ipcRenderer.send( 'main:active-window:subscribe' );
+            setTimeout( () => done( null ), 8000 );
+        } )` );
+        check( 'The foreground window check works', foreground != null );
+
         const send = component => combat.eval( `( () => { const c = ${JSON.stringify( component )}; c.timestamp = new Date(); require( 'electron' ).ipcRenderer.send( 'overlay:send:component', c ); return true; } )()` );
         const timer = ( id, duration ) => ( { instanceId: id, triggerId: 't', triggerName: 'test', overlayId: timerOverlayId, matches: [], action: { actionId: id, actionType: 3, showDuration: true, duration, displayText: id, timerColor: '#008000', hideTimer: false } } );
 

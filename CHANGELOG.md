@@ -3,6 +3,14 @@
 Each version's section is written to be pasted into its GitHub release
 description, which Nag shows in the Update Notes window.
 
+## v0.3.2 (unreleased)
+
+### Fixes
+- **The Update Notes title is fixed.** It showed the version with two v's, such as "vv0.3.1".
+
+### Security
+- **Updated Electron from version 36 to 45.** Electron is the browser engine Nag runs on, and version 36 no longer gets security fixes.
+
 ## v0.3.1
 
 ### Security

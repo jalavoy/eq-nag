@@ -114,7 +114,9 @@ const tests = {
             const wanted = await app.node.eval( `global.__x` );
             check( 'The window position is not saved while moving', during === x0, `${during} vs ${x0}` );
             check( 'The window position saves once it stops', prefs().x === wanted, `${prefs().x} vs ${wanted}` );
-            check( 'GINA is not searched for at launch', !/gina path/i.test( fs.readFileSync( path.join( profile, 'logs', 'main.log' ), 'utf-8' ) ) );
+            const mainLog = fs.readFileSync( path.join( profile, 'logs', 'main.log' ), 'utf-8' );
+            check( 'GINA is not searched for at launch', !/gina path/i.test( mainLog ) );
+            check( 'Test runs do not check for updates', !/Checking for update/i.test( mainLog ) );
 
             await app.main( `const w = ${mainWindow}; w.setPosition( w.getBounds().x + 7, w.getBounds().y ); global.__x2 = w.getBounds().x; return true;` );
             const x2 = await app.node.eval( `global.__x2` );

@@ -1,8 +1,11 @@
 # Tests
 
 All of these use made-up data in a temporary folder. They never read or change
-your real settings in `%APPDATA%\EQNag`, and the end-to-end tests contact no
-trigger websites.
+your real settings in `%APPDATA%\EQNag`. The end-to-end tests contact no trigger
+websites and turn off Nag's update check, though the Update Notes window may
+still contact GitHub.
+
+You need Node 22 or newer, the same version the builds use.
 
 ## Unit tests
 
@@ -63,6 +66,7 @@ a release, and after upgrading Electron or Angular, check:
   including a spell with an icon and a buff with an item effect.
 - **GINA importer:** the window with GINA installed, and its "not found" message.
 - **Sounds and speech:** alerts play out loud.
+- **Copy to clipboard:** a trigger with a clipboard action copies its text.
 - **A long session:** triggers keep working during a real raid, including buff
   timers that use cast times.
 - **Installer:** installing over the previous version keeps your settings, and
