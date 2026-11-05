@@ -14,7 +14,8 @@
     "tsc": "tsc",
     "ng": "ng",
     "start": "electron .",
-    "test": "ng test",
+    "test": "node tests/unit/app-logic.test.cjs && node tests/unit/share-files.test.cjs",
+    "test:e2e": "node tests/e2e/overlay.test.cjs && node tests/e2e/app.test.cjs",
     "lint": "ng lint",
     "e2e": "ng e2e",
     "start:electron": "tsc && ng build --configuration=production && electron .",
@@ -83,7 +84,8 @@
     "protractor": "~7.0.0",
     "ts-node": "~8.3.0",
     "tslint": "~6.1.0",
-    "typescript": "^4.6.4"
+    "typescript": "^4.6.4",
+    "ws": "^8.22.1"
   },
   "repository": {
     "type": "git",
@@ -130,6 +132,7 @@
       "!.angular",
       "!.vscode",
       "!e2e",
+      "!tests",
       "!source-maps",
       "package.json",
       "!tsconfig*",

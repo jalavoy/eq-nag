@@ -1,0 +1,78 @@
+{
+    "format": "nag-share",
+    "formatVersion": 1,
+    "type": "triggers",
+    "shareId": "shareTypical0001",
+    "versionId": "versionTypical01",
+    "model": {
+        "name": "Made-up triggers for the tests",
+        "folders": [
+            {
+                "folderId": "folderTimers0001",
+                "name": "Timers",
+                "children": [
+                    { "folderId": "folderRaid000001", "name": "Raid", "children": [] }
+                ]
+            }
+        ],
+        "triggers": [
+            {
+                "triggerId": "triggerDot000001",
+                "name": "Example DoT",
+                "folderId": "folderTimers0001",
+                "enabled": true,
+                "captureMethod": "Sequential",
+                "importType": 1,
+                "externalSource": "EQSR",
+                "allakhazamUrl": "https://spells.eqresource.com/spells.php?id=1",
+                "classLevels": [ { "class": "Necromancer", "level": 60 } ],
+                "conditions": [],
+                "capturePhrases": [
+                    { "phraseId": "phraseDot0000001", "phrase": "^(?<target>.+?)\\s?(?:'s\\b)? is burned\\.$", "useRegEx": true, "duration": null },
+                    { "phraseId": "phraseDot0000002", "phrase": "^?{target} has taken (?<damage>\\d*) ?damage from your Example DoT", "useRegEx": true, "ignoreCase": true }
+                ],
+                "actions": [
+                    {
+                        "actionId": "actionDot0000001",
+                        "actionType": 6,
+                        "overlayId": "overlayTimer0001",
+                        "displayText": "Example DoT on ${target}",
+                        "duration": 54,
+                        "endingDuration": 6,
+                        "castTime": 2500,
+                        "phrases": [ "phraseDot0000001" ],
+                        "secondaryPhrases": [ "phraseDot0000002" ],
+                        "endEarlyPhrases": [
+                            { "phraseId": "phraseDot0000003", "phrase": "^${target} (?:(?:has been|was) slain by [^!]*!|died\\.)$", "useRegEx": true, "ignoreCase": true }
+                        ]
+                    }
+                ]
+            },
+            {
+                "triggerId": "triggerEmote0001",
+                "name": "Example emote",
+                "folderId": "folderRaid000001",
+                "enabled": true,
+                "captureMethod": "Any match",
+                "conditions": [],
+                "classLevels": [],
+                "capturePhrases": [
+                    { "phraseId": "phraseEmote00001", "phrase": "^(?:~ )?${Character} begins the pull\\.$", "useRegEx": true },
+                    { "phraseId": "phraseEmote00002", "phrase": "{S} says, '{S1}'", "useRegEx": false }
+                ],
+                "actions": [
+                    {
+                        "actionId": "actionEmote00001",
+                        "actionType": 0,
+                        "overlayId": "overlayAlert0001",
+                        "displayText": "<b style=\"color: #ff0000\">Pull!</b>",
+                        "duration": "12",
+                        "phrases": [ "phraseEmote00001" ]
+                    }
+                ]
+            }
+        ],
+        "overlays": []
+    },
+    "files": []
+}
