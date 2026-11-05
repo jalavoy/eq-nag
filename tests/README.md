@@ -2,8 +2,9 @@
 
 All of these use made-up data in a temporary folder. They never read or change
 your real settings in `%APPDATA%\EQNag`. The end-to-end tests contact no trigger
-websites and turn off Nag's update check, though the Update Notes window may
-still contact GitHub.
+websites, turn off Nag's update check, and mark the update notes as already
+seen, so the Update Notes window (which loads from GitHub) doesn't open.
+Nag's windows still open during a run, but without taking focus.
 
 You need Node 22 or newer, the same version the builds use.
 
