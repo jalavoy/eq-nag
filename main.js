@@ -100,6 +100,12 @@ const allowMultipleInstances = false;
 const fs = await import( 'fs' );
 // NAG_NO_UPDATES=1 turns updates off, so that test runs can't download or install one.
 var doUpdateCheck = process.env.NAG_NO_UPDATES !== '1';
+// NAG_NO_FOCUS=1 opens windows without taking focus, so that test runs don't
+// pull focus away from whatever the user is doing.
+if ( process.env.NAG_NO_FOCUS === '1' ) {
+    BrowserWindow.prototype.show = BrowserWindow.prototype.showInactive;
+    BrowserWindow.prototype.focus = function () { };
+}
 
 
 import remoteMain from '@electron/remote/main/index.js';
@@ -127,8 +133,7 @@ function createTray() {
         },
         {
             label: 'Exit', click: function () {
-                app.isQuiting = true;
-                app.quit();
+                requestQuit( false, mainWindow?.webContents );
             }
         }
     ] );
@@ -242,7 +247,14 @@ function createWindow() {
         mainWindow = null;
     } );
 
-    mainWindow.on( 'close', async () => {
+    // Closing the window sends Nag to the system tray; only quitting the app
+    // (the tray menu's Exit, or app.quit) actually closes it.
+    mainWindow.on( 'close', async ( event ) => {
+        if ( !app.isQuitting ) {
+            event.preventDefault();
+            mainWindow.hide();
+            return;
+        }
         winManager.unload();
         await logBootstrap.unload();
     } );
@@ -285,7 +297,8 @@ app.commandLine.appendSwitch( 'enable-speech-dispatcher' );
 app.commandLine.appendSwitch( 'js-flags', '--enable-experimental-regexp-engine-on-excessive-backtracks' );
 
 app.on( 'before-quit', async () => {
-    trayMenu.destroy();
+    app.isQuitting = true;
+    trayMenu?.destroy();
     trayMenu = null;
 } );
 
@@ -583,18 +596,29 @@ ipcMain.on( 'app:log:info', ( event, data ) => {
 } );
 
 var quitCalled = false;
-ipcMain.on( 'app:quit', async ( event, forceQuit ) => {
+
+/**
+ * Quits Nag, unless an archive is in progress and the quit isn't forced; then
+ * the main window is shown and asked to let the user choose what to do.
+ * 
+ * @param {boolean} forceQuit Quit even if an archive is in progress.
+ * @param {Electron.WebContents | undefined} sender Where to send a quit failure.
+ */
+async function requestQuit( forceQuit, sender ) {
     if ( forceQuit === true || !logBootstrap.isBackupProcessing ) {
         quitCalled = true;
         winManager.unload();
         await logBootstrap.unload();
         app.quit();
     } else {
-        event.sender.send( 'app:quit:failure', {
+        mainWindow?.show();
+        sender?.send( 'app:quit:failure', {
             code: 'backup'
         } );
     }
-} );
+}
+
+ipcMain.on( 'app:quit', ( event, forceQuit ) => requestQuit( forceQuit, event.sender ) );
 
 process.on( 'exit', () => {
     !quitCalled && app.quit();

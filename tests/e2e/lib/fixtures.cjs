@@ -2,6 +2,7 @@
 // write the real settings folder.
 const fs = require( 'fs' );
 const path = require( 'path' );
+const appVersion = require( '../../../package.json' ).version;
 
 const alertOverlayId = 'overlayAlert0001';
 const timerOverlayId = 'overlayTimer0001';
@@ -67,9 +68,12 @@ function createProfile( profile, options = {} ) {
     fs.writeFileSync( log, '' );
 
     // Version 1 settings: the app's own migrations fill in everything else.
+    // The update notes are marked as seen, and the FCT combat group question
+    // as answered, so neither window opens during a run.
     write( 'user-preferences.json', {
         version: 1, setup: false, setupCompleted: true, minimizeToTrayOnLoad: false, everquestInstallFolder: path.join( profile, 'eq' ),
         windowBounds: { x: 100, y: 100, width: 1100, height: 750 }, persistentStorage: {},
+        lastViewedUpdateNotes: appVersion, askForCombatGroupMigrations: false,
     } );
     write( 'overlays-database.json', {
         version: 19, fctCombatGroups: [],

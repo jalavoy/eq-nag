@@ -870,6 +870,8 @@ class WindowManager {
             skipTaskbar: true,
             maximizable: false,
             enableLargerThanScreen: true,
+            // Test runs (NAG_NO_FOCUS=1) show it below, without taking focus.
+            show: process.env.NAG_NO_FOCUS !== '1',
         } );
 
         require( "@electron/remote/main" ).enable( renderer.webContents );
@@ -891,6 +893,9 @@ class WindowManager {
         renderer.setAlwaysOnTop( true, "screen-saver" );
         renderer.setVisibleOnAllWorkspaces( true );
         renderer.setFullScreenable( false );
+        if ( !renderer.isVisible() ) {
+            renderer.showInactive();
+        }
         
         // renderer.setAlwaysOnTop( true, "screen-saver" );
         

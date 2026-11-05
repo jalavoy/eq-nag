@@ -2,7 +2,7 @@
 //
 //   node tests/e2e/app.test.cjs [--exe <path>] [group ...]
 //
-// Groups: triggers, saving, settingsCleanup, generators, damagedFile, importFolders
+// Groups: triggers, saving, settingsCleanup, generators, damagedFile, importFolders, closeToTray
 const fs = require( 'fs' );
 const path = require( 'path' );
 const { check, finish, abort } = require( '../lib/report.cjs' );
@@ -286,6 +286,59 @@ const tests = {
             const text = await ui.dialogText( app.ui );
             check( 'A folder with triggers stays in the import list', /FOLDER_WITH_TRIGGERS/.test( text ), text.slice( 0, 120 ).replace( /\n/g, ' ' ) );
             check( 'An empty folder is removed from the import list', !/FOLDER_EMPTY/.test( text ) );
+        } finally { await stop( app ); }
+    },
+
+    /** Closing the main window sends Nag to the tray; only quitting ends it. */
+    async closeToTray() {
+        const { profile } = createProfile( path.join( work.folder, 'closeToTray' ) );
+        const app = await start( exePath( args ), profile );
+        // Whether the main window's page is gone; the process itself isn't
+        // reliably seen exiting while the debuggers are attached. While Nag
+        // shuts down its debug port can stop answering, which also counts.
+        const mainPageGone = async () => {
+            try {
+                const pages = await Promise.race( [ app.pages(), sleep( 2000 ).then( () => null ) ] );
+                return pages === null || !pages.some( t => /#\/dashboard/.test( t.url ) );
+            } catch { return true; }
+        };
+        const mainPageGoneWithin = async ms => {
+            for ( let t = 0; t < ms; t += 500 ) {
+                if ( await mainPageGone() ) return true;
+                await sleep( 500 );
+            }
+            return false;
+        };
+        const mainWindow = `electron.BrowserWindow.getAllWindows().find( w => /dashboard|index\\.html/.test( w.webContents.getURL() ) )`;
+        const windowState = () => app.main( `const w = ${mainWindow}; return w ? ( w.isVisible() ? 'visible' : 'hidden' ) : 'gone';` );
+        try {
+            await sleep( 2000 );
+            await app.main( `${mainWindow}.show(); return true;` );
+            check( 'The main window starts visible', await windowState() === 'visible' );
+
+            const buttons = await app.ui.eval( `[ ...document.querySelectorAll( 'mat-toolbar.titlebar button' ) ].map( b => b.getAttribute( 'aria-label' ) )` );
+            check( 'There is no separate minimize-to-tray button', !buttons.includes( 'Minimize to tray' ), JSON.stringify( buttons ) );
+
+            await app.ui.eval( `document.querySelector( 'button[aria-label="Close to system tray"]' ).click(); true` );
+            await sleep( 1500 );
+            check( 'The close button hides the window', await windowState() === 'hidden' );
+            check( 'Nag keeps running after the close button', !await mainPageGone() && await app.ui.eval( `1 + 1` ) === 2 );
+
+            // What the tray's Show does.
+            await app.main( `${mainWindow}.show(); return true;` );
+            await sleep( 500 );
+            check( 'The window can be shown again', await windowState() === 'visible' );
+
+            // Alt+F4, or Close from the taskbar.
+            await app.main( `${mainWindow}.close(); return true;` );
+            await sleep( 1500 );
+            check( 'Closing the window hides it', await windowState() === 'hidden' );
+            check( 'Nag keeps running after the window closes', !await mainPageGone() && await app.ui.eval( `1 + 1` ) === 2 );
+            check( 'Overlays keep running', await app.renderer.eval( `1 + 1` ) === 2 );
+
+            // The tray's Exit and the update installer quit through app.quit.
+            app.main( `electron.app.quit(); return true;` ).catch( () => { } );
+            check( 'Quitting the app closes the hidden window', await mainPageGoneWithin( 15000 ) );
         } finally { await stop( app ); }
     },
 };

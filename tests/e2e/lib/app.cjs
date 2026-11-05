@@ -73,7 +73,7 @@ async function open( target, errors ) {
  */
 async function start( exe, profile ) {
     const { targets } = await import( '../../../tools/perf/cdp.mjs' );
-    const child = spawn( exe, [ `--user-data-dir=${profile}`, `--remote-debugging-port=${devToolsPort}`, `--inspect=${inspectPort}` ], { stdio: 'ignore', env: { ...process.env, NAG_NO_UPDATES: '1' } } );
+    const child = spawn( exe, [ `--user-data-dir=${profile}`, `--remote-debugging-port=${devToolsPort}`, `--inspect=${inspectPort}` ], { stdio: 'ignore', env: { ...process.env, NAG_NO_UPDATES: '1', NAG_NO_FOCUS: '1' } } );
     const pages = async () => ( await targets( devToolsPort ) ).filter( t => t.type === 'page' );
     const app = { child, pages, profile };
 
